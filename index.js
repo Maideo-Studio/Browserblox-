@@ -1,3 +1,7 @@
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
 // User management system
 class UserManager {
     constructor() {
@@ -46,12 +50,16 @@ class UserManager {
             return { success: false, message: 'Senha atual incorreta!' };
         }
 
-        // Se está mudando o username
+        let actualNewUsername = newUsername || currentUsername; // Determine the actual new username
+
+        // If username is changing
         if (newUsername && newUsername !== currentUsername) {
             if (this.users[newUsername]) {
                 return { success: false, message: 'Novo usuário já existe!' };
             }
-            // Copy data to new username. Profile data handled by ProfileManager.
+            // IMPORTANT: Migrate profile data BEFORE deleting old user entry
+            profileManager.migrateProfileUsername(currentUsername, newUsername);
+
             this.users[newUsername] = { ...this.users[currentUsername] };
             delete this.users[currentUsername];
             
@@ -60,14 +68,13 @@ class UserManager {
             this.currentUser = newUsername;
         }
 
-        // Se está mudando a senha
+        // Se está mudando a senha (apply to the actual new username)
         if (newPassword) {
-            const targetUsername = newUsername || currentUsername;
-            this.users[targetUsername].password = newPassword;
+            this.users[actualNewUsername].password = newPassword;
         }
 
         localStorage.setItem('rogold_users', JSON.stringify(this.users));
-        return { success: true, newUsername: newUsername || currentUsername };
+        return { success: true, newUsername: actualNewUsername };
     }
 
     getAllUsernames() {
@@ -101,23 +108,36 @@ class ProfileManager {
             sentRequests: [],
             receivedRequests: [],
             favorites: [],
-            profilePicture: null
+            profilePicture: null,
+            coins: 500, 
+            inventory: [], 
+            equippedItems: {} 
         };
 
         // Merge existing profile data with default values to ensure all fields are present.
         const mergedProfile = { ...defaultProfile, ...rawProfile };
 
         // Ensure array types for lists and filter out non-string/empty values
-        ['friends', 'sentRequests', 'receivedRequests', 'favorites'].forEach(key => {
+        ['friends', 'sentRequests', 'receivedRequests', 'favorites', 'inventory'].forEach(key => { 
             if (!Array.isArray(mergedProfile[key])) {
                 mergedProfile[key] = [];
             }
             mergedProfile[key] = mergedProfile[key].filter(item => typeof item === 'string' && item.trim() !== '');
         });
 
+        // Ensure equippedItems is an object
+        if (typeof mergedProfile.equippedItems !== 'object' || mergedProfile.equippedItems === null) {
+            mergedProfile.equippedItems = {};
+        }
+
         // Specifically handle `joinDate` as it might be sourced from `userManager.users`
         if (!mergedProfile.joinDate) {
             mergedProfile.joinDate = this.userManager.users[username]?.createdAt || new Date().toISOString();
+        }
+
+        // Ensure coins is a number
+        if (typeof mergedProfile.coins !== 'number' || isNaN(mergedProfile.coins)) {
+            mergedProfile.coins = defaultProfile.coins;
         }
 
         // Update the stored profile with the merged structure.
@@ -131,6 +151,18 @@ class ProfileManager {
         if (this.profiles[username]) {
             Object.assign(this.profiles[username], updates);
             this.saveProfiles();
+            return true;
+        }
+        return false;
+    }
+
+    // Add this new method to ProfileManager
+    migrateProfileUsername(oldUsername, newUsername) {
+        if (this.profiles[oldUsername]) {
+            this.profiles[newUsername] = { ...this.profiles[oldUsername] }; 
+            delete this.profiles[oldUsername]; 
+            this.saveProfiles();
+            console.log(`Profile migrated from ${oldUsername} to ${newUsername}`);
             return true;
         }
         return false;
@@ -220,6 +252,7 @@ class ProfileManager {
         const profile = this.getProfile(username);
         // Ensure gameTitle is a valid string before adding
         if (typeof gameTitle !== 'string' || gameTitle.trim() === '') {
+            console.error("Attempted to add invalid game title to favorites:", gameTitle); 
             return { success: false, message: 'Nome de jogo inválido.' };
         }
         if (!profile.favorites.includes(gameTitle)) {
@@ -236,6 +269,7 @@ class ProfileManager {
         const initialLength = profile.favorites.length;
         // Ensure gameTitle is a valid string for comparison
         if (typeof gameTitle !== 'string' || gameTitle.trim() === '') {
+            console.error("Attempted to remove invalid game title from favorites:", gameTitle); 
             return { success: false, message: 'Nome de jogo inválido para remover.' };
         }
         profile.favorites = profile.favorites.filter(game => game !== gameTitle);
@@ -246,12 +280,399 @@ class ProfileManager {
         return { success: false, message: `'${gameTitle}' não está nos seus favoritos.` };
     }
 
+    // NEW: Coins management
+    addCoins(username, amount) {
+        const profile = this.getProfile(username);
+        if (profile) {
+            profile.coins = (profile.coins || 0) + amount;
+            this.saveProfiles();
+            return { success: true, newBalance: profile.coins };
+        }
+        return { success: false, message: 'Usuário não encontrado.' };
+    }
+
+    subtractCoins(username, amount) {
+        const profile = this.getProfile(username);
+        if (profile) {
+            if (profile.coins >= amount) {
+                profile.coins -= amount;
+                this.saveProfiles();
+                return { success: true, newBalance: profile.coins };
+            }
+            return { success: false, message: 'Moedas insuficientes.' };
+        }
+        return { success: false, message: 'Usuário não encontrado.' };
+    }
+
+    // NEW: Inventory and Equipment management
+    addItemToInventory(username, itemId) {
+        const profile = this.getProfile(username);
+        if (profile && !profile.inventory.includes(itemId)) {
+            profile.inventory.push(itemId);
+            this.saveProfiles();
+            return { success: true, message: 'Item adicionado ao inventário!' };
+        }
+        return { success: false, message: 'Item já está no inventário ou usuário não encontrado.' };
+    }
+
+    // Equip an item, making sure it's in inventory and replacing existing item of same type
+    equipItem(username, itemId, itemType) {
+        const profile = this.getProfile(username);
+        if (!profile) {
+            return { success: false, message: 'Usuário não encontrado.' };
+        }
+        if (!profile.inventory.includes(itemId)) {
+            return { success: false, message: 'Você não possui este item.' };
+        }
+        
+        profile.equippedItems[itemType] = itemId; 
+        this.saveProfiles();
+        return { success: true, message: 'Item equipado com sucesso!' };
+    }
+
+    unequipItem(username, itemType) {
+        const profile = this.getProfile(username);
+        if (!profile) {
+            return { success: false, message: 'Usuário não encontrado.' };
+        }
+        if (profile.equippedItems[itemType]) {
+            delete profile.equippedItems[itemType];
+            this.saveProfiles();
+            return { success: true, message: `Item do tipo ${itemType} desequipado.` };
+        }
+        return { success: false, message: `Nenhum item do tipo ${itemType} está equipado.` };
+    }
+
     saveProfiles() {
         localStorage.setItem('rogold_profiles', JSON.stringify(this.profiles));
     }
 }
 
 const profileManager = new ProfileManager(userManager);
+
+// NEW: Generic 3D Viewer Class to manage multiple viewers
+class ThreeDViewer {
+    constructor(containerId, initialModelPath = null, isAvatarViewer = false) {
+        this.container = document.getElementById(containerId);
+        if (!this.container) {
+            console.error(`3D Viewer container '${containerId}' not found.`);
+            return;
+        }
+
+        this.scene = new THREE.Scene();
+        this.camera = new THREE.PerspectiveCamera(75, this.container.clientWidth / this.container.clientHeight, 0.1, 1000);
+        this.renderer = null; 
+        this.controls = null; 
+        this.currentModel = null;
+        this.animateLoopId = null;
+        this.loader = new GLTFLoader();
+        this.isAvatarViewer = isAvatarViewer; 
+
+        this.init(initialModelPath);
+    }
+
+    init(initialModelPath) {
+        // Clear previous canvas if it exists
+        const existingCanvas = this.container.querySelector('canvas');
+        if (existingCanvas) {
+            this.container.removeChild(existingCanvas);
+            this.stopAnimation();
+        }
+
+        // Remove placeholder text if viewer is being initialized
+        const placeholder = this.container.querySelector('.viewer-placeholder');
+        if (placeholder) {
+            placeholder.remove();
+        }
+
+        this.scene.background = new THREE.Color(0xadd8e6); 
+
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+        this.container.appendChild(this.renderer.domElement);
+
+        // Lights (add only once)
+        if (!this.scene.getObjectByName('ambientLight')) {
+            const ambientLight = new THREE.AmbientLight(0x404040); 
+            ambientLight.name = 'ambientLight';
+            this.scene.add(ambientLight);
+        }
+        if (!this.scene.getObjectByName('directionalLight')) {
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1); 
+            directionalLight.position.set(0, 5, 5).normalize();
+            directionalLight.name = 'directionalLight';
+            this.scene.add(directionalLight);
+        }
+
+        // Controls
+        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.enableDamping = true;
+        this.controls.dampingFactor = 0.05;
+        this.controls.enablePan = false;
+        this.controls.enableZoom = true; 
+        // Allow full vertical orbit for item viewer, limited for avatar viewer
+        if (this.isAvatarViewer) {
+            this.controls.minPolarAngle = Math.PI / 2 - 0.5;
+            this.controls.maxPolarAngle = Math.PI / 2 + 0.5;
+            this.controls.target.set(0, 0.5, 0); // Target center of avatar body (half of the new height)
+        } else {
+            this.controls.minPolarAngle = 0; // Look from top
+            this.controls.maxPolarAngle = Math.PI; // Look from bottom
+            this.controls.target.set(0, 0, 0); // Default target for items
+        }
+        this.controls.update();
+
+        // Animation loop
+        const animate = () => {
+            this.animateLoopId = requestAnimationFrame(animate);
+            this.controls.update();
+            this.renderer.render(this.scene, this.camera);
+        };
+        animate();
+
+        // Handle window resize
+        this.onWindowResize = () => {
+            const newWidth = this.container.clientWidth;
+            const newHeight = this.container.clientHeight;
+            this.camera.aspect = newWidth / newHeight;
+            this.camera.updateProjectionMatrix();
+            this.renderer.setSize(newWidth, newHeight);
+        };
+        window.addEventListener('resize', this.onWindowResize);
+
+        if (initialModelPath) {
+            this.loadModel(initialModelPath);
+        }
+    }
+
+    stopAnimation() {
+        if (this.animateLoopId) {
+            cancelAnimationFrame(this.animateLoopId);
+            this.animateLoopId = null;
+        }
+        window.removeEventListener('resize', this.onWindowResize);
+    }
+
+    clearScene() {
+        // Remove all objects from the scene except lights
+        const objectsToRemove = this.scene.children.filter(obj => 
+            obj.name !== 'ambientLight' && obj.name !== 'directionalLight'
+        );
+        objectsToRemove.forEach(obj => this.scene.remove(obj));
+        this.currentModel = null;
+    }
+
+    // New loadModel signature: isAccessory indicates if it's being added as an accessory
+    // accessoryType and modelPathForAccessory are only relevant if isAccessory is true
+    loadModel(modelPath, isAccessory = false, accessoryType = null) {
+        if (!isAccessory) {
+            this.clearScene();
+        }
+
+        this.loader.load(modelPath, (gltf) => {
+            const newModel = gltf.scene;
+            newModel.name = modelPath; 
+
+            // Step 1: Apply intrinsic model-specific transformations (e.g., for rotation issues)
+            this._applyIntrinsicModelTransforms(newModel, modelPath);
+
+            if (!isAccessory) {
+                // If it's a standalone model (item viewer or base avatar)
+                this.currentModel = newModel;
+                this.scene.add(this.currentModel);
+                // Step 2: Fit model to viewer, which also positions it at origin and scales it generally
+                this._fitCameraAndModelToViewer(this.currentModel);
+            } else {
+                // If it's an accessory being added to an existing model (avatar viewer)
+                this.scene.add(newModel);
+                // Step 3: Position and scale the accessory relative to the main avatar
+                this._positionAccessoryOnAvatar(newModel, modelPath, accessoryType);
+            }
+
+        }, undefined, (error) => {
+            console.error(`Error loading 3D model ${modelPath}:`, error);
+            // Removed specific error message for item viewer placeholder.
+            // If it's an accessory and fails, it just won't show.
+        });
+    }
+
+    // Renamed and refined fitCameraToModel
+    _fitCameraAndModelToViewer(model) {
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+
+        // Handle case where size is zero (empty or invalid model)
+        if (size.lengthSq() === 0) {
+            console.warn("Model has zero size bounding box, cannot fit camera.");
+            this.camera.position.set(0, 0, 5);
+            this.controls.target.set(0, 0, 0);
+            this.camera.updateProjectionMatrix();
+            this.controls.update();
+            return;
+        }
+
+        // Position model on the ground (y=0) and center horizontally
+        model.position.x -= center.x;
+        model.position.z -= center.z;
+        model.position.y -= box.min.y;
+
+        // Recalculate box after moving model to origin
+        const newBox = new THREE.Box3().setFromObject(model);
+        const newSize = newBox.getSize(new THREE.Vector3());
+        const newCenter = newBox.getCenter(new THREE.Vector3());
+
+        // Apply a universal scale to make models roughly 'targetHeight' tall for consistent viewing
+        const targetHeight = 1.0; // Changed from 2.0 to 1.0
+        if (newSize.y > 0) { // Avoid division by zero
+            const scaleFactor = targetHeight / newSize.y;
+            model.scale.multiplyScalar(scaleFactor);
+            // Recalculate box and center after final scaling
+            newBox.setFromObject(model);
+            newSize.copy(newBox.getSize(new THREE.Vector3()));
+            newCenter.copy(newBox.getCenter(new THREE.Vector3()));
+        }
+
+        // Calculate camera distance to frame the object based on its largest dimension and camera FOV
+        const maxDim = Math.max(newSize.x, newSize.y, newSize.z);
+        const fov = this.camera.fov * (Math.PI / 180); 
+        let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)); 
+        
+        // Add some padding to the view distance
+        cameraZ *= 1.5; 
+
+        // Set camera position and target
+        this.camera.position.set(newCenter.x, newCenter.y, cameraZ); 
+        this.controls.target.set(newCenter.x, newCenter.y, newCenter.z); 
+        
+        this.camera.near = 0.1; 
+        this.camera.far = cameraZ + maxDim * 2; 
+        this.camera.updateProjectionMatrix();
+
+        this.controls.update();
+    }
+
+    // New: Applies fixed rotation for models with export issues (Z-up vs Y-up)
+    _applyIntrinsicModelTransforms(model, modelPath) {
+        const commonRotationX = Math.PI / 2; // Rotate 90 degrees around X to orient correctly (Z-up to Y-up)
+
+        // Apply this rotation to all GLB models that are known to be Z-up exports
+        if (modelPath.includes('.glb') && !modelPath.includes('player.glb')) { // Don't rotate player.glb
+            model.rotation.set(commonRotationX, 0, 0); 
+        }
+    }
+
+    // New: Positions and scales accessories relative to the avatar
+    _positionAccessoryOnAvatar(accessoryModel, modelPath, accessoryType) {
+        let offset = { x: 0, y: 0, z: 0 };
+        
+        // Calculate the bounding box for the raw accessory model AFTER intrinsic transforms
+        const originalBox = new THREE.Box3().setFromObject(accessoryModel);
+        const originalSize = originalBox.getSize(new THREE.Vector3());
+
+        // Desired visual height for a hat on a 1-unit player (adjust as needed for aesthetics)
+        let targetVisualHeight = 0.2; 
+
+        if (accessoryType === 'hat') {
+            // Base Y position for hats on a 1-unit tall avatar (assuming 1 unit is head top)
+            offset = { x: 0, y: 1.0, z: 0 }; 
+
+            if (originalSize.y > 0) {
+                let scaleFactor = targetVisualHeight / originalSize.y;
+
+                // Apply model-specific adjustments if some hats are intrinsically larger/smaller
+                // or if they need a different visual prominence.
+                if (modelPath.includes('doge_roblox_hat.glb')) {
+                    scaleFactor *= 1.5; // Make doge hat larger
+                    offset.y = 1.15; // Move up for larger hat
+                    offset.z = 0.05; // Slightly forward
+                } else if (modelPath.includes('roblox_r_baseball_cap_r6.glb')) {
+                    scaleFactor *= 1.2; // Slightly larger for baseball cap
+                    offset.y = 1.08; // Adjust position for cap
+                    offset.z = 0.05;
+                } else if (modelPath.includes('roblox_fedora.glb')) {
+                    scaleFactor *= 1.1; // Slightly larger for fedora
+                    offset.y = 1.08; // Adjust position for fedora
+                    offset.z = 0.05;
+                }
+                
+                accessoryModel.scale.multiplyScalar(scaleFactor);
+            }
+        }
+        
+        // After scaling, re-center the accessory if its pivot isn't at the bottom
+        const scaledBox = new THREE.Box3().setFromObject(accessoryModel);
+        const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+        
+        // Adjust position so the base of the *scaled* accessory sits correctly relative to the target offset
+        accessoryModel.position.x = offset.x - scaledCenter.x;
+        accessoryModel.position.y = offset.y - scaledBox.min.y; // Align bottom of accessory with target Y
+        accessoryModel.position.z = offset.z - scaledCenter.z;
+    }
+
+    destroy() {
+        this.stopAnimation();
+        if (this.renderer && this.renderer.domElement.parentNode) {
+            this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
+        }
+        this.scene.traverse((object) => { // Dispose of geometries, materials, textures
+            if (object.isMesh) {
+                if (object.geometry) object.geometry.dispose();
+                if (object.material) {
+                    // In case of multiple materials or material arrays
+                    if (Array.isArray(object.material)) {
+                        object.material.forEach(material => material.dispose());
+                    } else {
+                        object.material.dispose();
+                    }
+                }
+            }
+        });
+        this.scene.clear(); // Clear all objects from the scene
+        this.renderer.dispose();
+        if (this.controls) this.controls.dispose();
+        // Nullify references to aid garbage collection
+        this.scene = null;
+        this.camera = null;
+        this.renderer = null;
+        this.controls = null;
+        this.currentModel = null;
+    }
+}
+
+// Global 3D viewer instances
+// This variable will hold the instance of our ThreeDViewer class for the avatar.
+let avatar3DViewer = null; 
+
+// Catalog Management
+class CatalogManager {
+    constructor() {
+        this.items = [
+            // Only 3D items with modelPath and a corresponding imageUrl (thumbnail)
+            { id: 'hat_red', name: 'Boné Vermelho R', type: 'hat', price: 100, imageUrl: 'hat_red_thumbnail.png', modelPath: 'roblox_r_baseball_cap_r6.glb' },
+            { id: 'hat_doge', name: 'Chapéu Doge', type: 'hat', price: 500, imageUrl: 'hat_doge_thumbnail.png', modelPath: 'doge_roblox_hat.glb' },
+            { id: 'hat_fedora_black', name: 'Fedora Preta', type: 'hat', price: 300, imageUrl: 'hat_fedora_black_thumbnail.png', modelPath: 'roblox_fedora.glb' }
+            // Removed all 2D items as per user request
+        ]
+    }
+
+    getAllItems() {
+        return this.items;
+    }
+
+    getItemsByType(type) {
+        if (type === 'all') {
+            return this.items;
+        }
+        return this.items.filter(item => item.type === type);
+    }
+
+    getItemById(id) {
+        return this.items.find(item => item.id === id);
+    }
+}
+
+const catalogManager = new CatalogManager();
 
 // Community Management
 class CommunityManager {
@@ -316,27 +737,28 @@ const communityManager = new CommunityManager();
 // Helper functions for showing/hiding sections with fade animation
 function showSection(sectionElement) {
     if (!sectionElement) return;
-    sectionElement.style.opacity = '0'; // Ensure starting opacity is 0 for fade-in
-    sectionElement.classList.remove('hidden'); // This makes display: block via CSS
+    sectionElement.style.opacity = '0'; 
+    sectionElement.classList.remove('hidden'); 
     // Force reflow for transition to apply correctly
     sectionElement.offsetHeight; 
-    sectionElement.style.opacity = '1'; // Trigger CSS transition
+    sectionElement.style.opacity = '1'; 
 }
 
 function hideSection(sectionElement) {
     if (!sectionElement) return;
-    sectionElement.style.opacity = '0'; // Trigger CSS transition for fade-out
+    sectionElement.style.opacity = '0'; 
     // After transition, set display to none
     setTimeout(() => {
         sectionElement.classList.add('hidden');
-    }, 300); // Match transition duration (0.3s)
+    }, 300); 
 }
 
 // Function to manage which auth/form section is visible
 // This function hides all auth forms except the target one.
 function showOnlyAuthSection(targetId) {
-    // This list should only contain forms or detail views that replace other content.
-    const authSections = ['login-section', 'register-section', 'settings-section', 'profile-edit-section', 'create-blog-form', 'blog-detail'];
+    // This list should only contain top-level authentication/settings forms
+    // that overlay or replace the main content area.
+    const authSections = ['login-section', 'register-section', 'settings-section', 'profile-edit-section']; // Corrected list
     
     authSections.forEach(id => {
         const section = document.getElementById(id);
@@ -352,31 +774,33 @@ function showOnlyAuthSection(targetId) {
 
 // Global UI functions for inline HTML event handlers (e.g., onclick) and event listeners
 // Defined as function declarations so they are hoisted and available throughout the script.
-function openLoginModal() {
+async function openLoginModal() {
     // Hide all main content sections and display only the target auth section
     hideSection(document.getElementById('featured-games'));
     hideSection(document.querySelector('.banner'));
     hideSection(document.getElementById('profile-section'));
     hideSection(document.getElementById('community-section'));
+    hideSection(document.getElementById('catalog-section')); 
     hideSection(document.getElementById('blog-list')); 
 
     showOnlyAuthSection('login-section');
-    setActiveNavLink(null); // No nav link active when forms are open
+    setActiveNavLink(null); 
 }
 
-function openRegisterModal() {
+async function openRegisterModal() {
     // Hide all main content sections and display only the target auth section
     hideSection(document.getElementById('featured-games'));
     hideSection(document.querySelector('.banner'));
     hideSection(document.getElementById('profile-section'));
     hideSection(document.getElementById('community-section'));
+    hideSection(document.getElementById('catalog-section')); 
     hideSection(document.getElementById('blog-list')); 
 
     showOnlyAuthSection('register-section');
-    setActiveNavLink(null); // No nav link active when forms are open
+    setActiveNavLink(null); 
 }
 
-function openSettingsModal() {
+async function openSettingsModal() {
     const currentUser = userManager.getCurrentUser();
     if (currentUser) {
         document.getElementById('current-username-inline').value = currentUser;
@@ -386,13 +810,14 @@ function openSettingsModal() {
         hideSection(document.querySelector('.banner'));
         hideSection(document.getElementById('profile-section'));
         hideSection(document.getElementById('community-section'));
+        hideSection(document.getElementById('catalog-section')); 
         hideSection(document.getElementById('blog-list')); 
         
         showOnlyAuthSection('settings-section');
-        setActiveNavLink(null); // No nav link active when forms are open
+        setActiveNavLink(null); 
     } else {
-        alert('Você precisa estar logado para acessar as configurações.');
-        openLoginModal(); // Redirect to login if not logged in
+        await alert('Você precisa estar logado para acessar as configurações.');
+        openLoginModal(); 
     }
 }
 
@@ -401,19 +826,26 @@ async function logoutUser() {
     const confirmLogout = await confirm('Tem certeza que deseja sair da sua conta?');
     if (confirmLogout) {
         userManager.logout();
-        alert('Você saiu da sua conta.');
+        await alert('Você saiu da sua conta.');
         
         // Ensure all active content sections and auth forms are hidden
         hideSection(document.getElementById('profile-section'));
         hideSection(document.getElementById('community-section'));
+        hideSection(document.getElementById('catalog-section')); 
         hideSection(document.getElementById('blog-list')); 
-        showOnlyAuthSection(''); // Hide all auth forms (login, register, settings, profile-edit, blog forms)
+        showOnlyAuthSection(''); 
+        
+        // Stop the avatar 3D viewer when logging out
+        stopAvatar3DViewer();
+        stopCoinRewardTimer();
 
         // After a short delay for transitions to complete, show main content and then login
         setTimeout(() => {
-            showMainContent(); // Go back to main content
-            updateProfileLink(); // Update nav link to "Perfil" / "Login"
-            openLoginModal(); // Directly open the login form after logout
+            showMainContent(); 
+            updateProfileLink();
+            updateFeaturedGameCards(); 
+            updateUserCoinsDisplay(); 
+            openLoginModal(); 
         }, 300); 
     }
 }
@@ -421,7 +853,7 @@ async function logoutUser() {
 // This function is for closing an auth form and returning to the main page content.
 function hideCurrentAuthFormAndShowMainContent() {
     // Hide all auth forms first
-    showOnlyAuthSection(''); // This will hide all forms and ensures nothing is left hanging
+    showOnlyAuthSection(''); 
 
     // Then show the default main page content
     showMainContent();
@@ -431,14 +863,15 @@ function hideCurrentAuthFormAndShowMainContent() {
 function showMainContent() {
     hideSection(document.getElementById('profile-section'));
     hideSection(document.getElementById('community-section'));
+    hideSection(document.getElementById('catalog-section')); 
     hideSection(document.getElementById('blog-list'));
-    showOnlyAuthSection(''); // Corrected: This function handles hiding all auth sections
+    showOnlyAuthSection(''); 
 
     showSection(document.getElementById('featured-games'));
     showSection(document.querySelector('.banner'));
     
-    updateFeaturedGameCards(); // Update game cards when returning to main content
-    setActiveNavLink('home-link'); // Set 'Home' as active in nav
+    updateFeaturedGameCards(); 
+    setActiveNavLink('home-link'); 
 }
 
 // Enhanced UI Functions
@@ -451,7 +884,8 @@ function showProfile(username) {
     document.getElementById('profile-bio').textContent = profile.bio;
     document.querySelector('.profile-status').textContent = `Status: ${profile.status}`;
     document.getElementById('join-date').textContent = new Date(profile.joinDate).toLocaleDateString('pt-BR');
-    document.getElementById('favorite-count').textContent = profile.favorites.length; // NEW: Update favorite count
+    document.getElementById('favorite-count').textContent = profile.favorites.length;
+    document.getElementById('user-coins').textContent = profile.coins; 
 
     // Update profile picture
     const profileAvatarImg = document.getElementById('profile-avatar-img');
@@ -470,11 +904,12 @@ function showProfile(username) {
     hideSection(document.getElementById('featured-games'));
     hideSection(document.querySelector('.banner'));
     hideSection(document.getElementById('community-section')); 
+    hideSection(document.getElementById('catalog-section')); 
     hideSection(document.getElementById('blog-list')); 
-    showOnlyAuthSection(''); // Hide login/register forms if they were open
+    showOnlyAuthSection(''); 
     
-    showSection(profileSection); // Use showSection
-    setActiveNavLink('profile-link'); // Set 'Perfil' as active in nav
+    showSection(profileSection); 
+    setActiveNavLink('profile-link'); 
     
     // Setup tab functionality
     updateProfileTabs();
@@ -486,8 +921,8 @@ function hideProfile() {
     hideSection(profileSection); 
     
     setTimeout(() => {
-        showMainContent(); // Go back to main content
-        showOnlyAuthSection(''); // Ensure any profile sub-forms are hidden when returning to main content
+        showMainContent(); 
+        showOnlyAuthSection(''); 
     }, 300);
 }
 
@@ -495,18 +930,26 @@ function hideProfile() {
 function showCommunity() {
     const communitySection = document.getElementById('community-section');
     const blogList = document.getElementById('blog-list'); 
+    const createBlogForm = document.getElementById('create-blog-form'); // Get reference
+    const blogDetail = document.getElementById('blog-detail'); // Get reference
 
     // Hide main content and profile section
     hideSection(document.getElementById('featured-games'));
     hideSection(document.querySelector('.banner'));
     hideSection(document.getElementById('profile-section'));
-    showOnlyAuthSection(''); // Hide any active auth forms (login, register, etc.)
+    hideSection(document.getElementById('catalog-section')); 
+    showOnlyAuthSection(''); // Ensure top-level auth forms are hidden
+
+    // Ensure only the blog list is visible within the community section
+    // Hide create form and blog detail by default when showing community overview
+    if (createBlogForm) hideSection(createBlogForm); // Explicitly hide
+    if (blogDetail) hideSection(blogDetail); // Explicitly hide
 
     // Show community section and load blogs
     showSection(communitySection);
     showSection(blogList); 
     loadBlogs();
-    setActiveNavLink('community-link'); // Set 'Comunidade' as active in nav
+    setActiveNavLink('community-link'); 
 }
 
 function hideCommunity() {
@@ -516,9 +959,206 @@ function hideCommunity() {
     hideSection(blogList); 
 
     setTimeout(() => {
-        showMainContent(); // Go back to main content
-        showOnlyAuthSection(''); // Ensure any community sub-forms are hidden when returning to main content
+        showMainContent(); 
+        showOnlyAuthSection(''); 
     }, 300);
+}
+
+// Function to initialize and render the Avatar 3D Viewer
+function setupAndLoadAvatar3DViewer() {
+    if (!avatar3DViewer) {
+        avatar3DViewer = new ThreeDViewer('avatar-preview-display', 'player.glb', true); 
+    } else {
+        // If already exists, just ensure base model is loaded (it should clear accessories)
+        // Clear accessories manually to avoid re-loading base player if it's already there
+        const objectsToRemove = avatar3DViewer.scene.children.filter(obj => 
+            obj.name && obj.name !== 'player.glb' && obj.name !== 'ambientLight' && obj.name !== 'directionalLight'
+        );
+        objectsToRemove.forEach(obj => avatar3DViewer.scene.remove(obj));
+        
+        // Ensure the base player model is indeed present.
+        const basePlayer = avatar3DViewer.scene.getObjectByName('player.glb');
+        if (!basePlayer) {
+            avatar3DViewer.loadModel('player.glb');
+        }
+    }
+    updateEquippedAvatarItems(); 
+}
+
+// Function to stop the Avatar 3D Viewer
+function stopAvatar3DViewer() {
+    if (avatar3DViewer) {
+        avatar3DViewer.destroy();
+        avatar3DViewer = null; 
+    }
+}
+
+// NEW: Function to update equipped items on the 3D avatar preview
+function updateEquippedAvatarItems() {
+    const avatarDisplay = document.getElementById('avatar-preview-display');
+    const currentUser = userManager.getCurrentUser();
+
+    if (!currentUser) {
+        // If no user, destroy existing viewer and show placeholder
+        if (avatar3DViewer) {
+            avatar3DViewer.destroy();
+            avatar3DViewer = null;
+        }
+        if (avatarDisplay) {
+            avatarDisplay.innerHTML = '<p class="viewer-placeholder">Faça login para ver seu personagem 3D.</p>';
+        }
+        return;
+    }
+
+    // If user is logged in, ensure viewer is initialized
+    if (!avatar3DViewer) {
+        setupAndLoadAvatar3DViewer(); // This re-initializes and loads player.glb
+    } else {
+        // Ensure base player model is present, clear only accessories
+        const basePlayer = avatar3DViewer.scene.getObjectByName('player.glb');
+        if (!basePlayer) {
+            avatar3DViewer.loadModel('player.glb'); // Reload base player if somehow missing
+        }
+        // Remove only accessories from the scene
+        const objectsToRemove = avatar3DViewer.scene.children.filter(obj => 
+            obj.name && obj.name !== 'player.glb' && obj.name !== 'ambientLight' && obj.name !== 'directionalLight'
+        );
+        objectsToRemove.forEach(obj => avatar3DViewer.scene.remove(obj));
+    }
+
+    // Remove any existing placeholder if viewer is now active
+    const existingPlaceholder = avatarDisplay.querySelector('.viewer-placeholder');
+    if (existingPlaceholder) {
+        existingPlaceholder.remove();
+    }
+
+    const profile = profileManager.getProfile(currentUser);
+
+    for (const type in profile.equippedItems) {
+        const itemId = profile.equippedItems[type];
+        const item = catalogManager.getItemById(itemId);
+
+        if (item && item.modelPath) {
+            avatar3DViewer.loadModel(item.modelPath, true, item.type);
+        }
+    }
+    avatar3DViewer.controls.update(); 
+}
+
+function showCatalog() {
+    const catalogSection = document.getElementById('catalog-section');
+    const currentUser = userManager.getCurrentUser();
+
+    if (!currentUser) {
+        alert('Você precisa estar logado para acessar o catálogo.');
+        return;
+    }
+
+    updateUserCoinsDisplay();
+    
+    // Hide other sections
+    hideSection(document.getElementById('featured-games'));
+    hideSection(document.querySelector('.banner'));
+    hideSection(document.getElementById('profile-section'));
+    hideSection(document.getElementById('community-section')); 
+    hideSection(document.getElementById('blog-list')); 
+    showOnlyAuthSection(''); 
+
+    showSection(catalogSection);
+    renderCatalogItems('all'); 
+
+    // Initialize the Avatar 3D viewer when catalog is shown
+    setupAndLoadAvatar3DViewer(); 
+
+    setActiveNavLink('catalog-link'); 
+}
+
+function hideCatalog() {
+    const catalogSection = document.getElementById('catalog-section');
+    hideSection(catalogSection);
+
+    // Stop the Avatar 3D viewer when catalog is hidden
+    stopAvatar3DViewer();
+
+    setTimeout(() => {
+        showMainContent();
+    }, 300);
+}
+
+function updateUserCoinsDisplay() {
+    const currentUser = userManager.getCurrentUser();
+    const currentCatalogCoinsElement = document.getElementById('current-catalog-coins');
+    const userCoinsProfileElement = document.getElementById('user-coins'); 
+
+    if (currentUser) {
+        const profile = profileManager.getProfile(currentUser);
+        if (currentCatalogCoinsElement) {
+            currentCatalogCoinsElement.textContent = profile.coins;
+        }
+        if (userCoinsProfileElement) {
+            userCoinsProfileElement.textContent = profile.coins;
+        }
+    } else {
+        if (currentCatalogCoinsElement) {
+            currentCatalogCoinsElement.textContent = '---';
+        }
+        if (userCoinsProfileElement) {
+            userCoinsProfileElement.textContent = '---';
+        }
+    }
+}
+
+function renderCatalogItems(category) {
+    const currentUser = userManager.getCurrentUser();
+    const itemsGrid = document.getElementById('catalog-items-grid');
+    if (!itemsGrid) return;
+
+    const items = catalogManager.getItemsByType(category);
+    let userProfile = null;
+    if (currentUser) {
+        userProfile = profileManager.getProfile(currentUser);
+    }
+
+    if (items.length === 0) {
+        itemsGrid.innerHTML = '<p class="empty-message">Nenhum item disponível nesta categoria.</p>';
+        return;
+    }
+
+    itemsGrid.innerHTML = items.map(item => {
+        let buttonHtml = '';
+        const isOwned = userProfile && userProfile.inventory.includes(item.id);
+        const isEquipped = userProfile && userProfile.equippedItems[item.type] === item.id;
+
+        if (!currentUser) {
+            buttonHtml = `<button class="buy-button" disabled>Entrar para Comprar</button>`;
+        } else if (isOwned) {
+            if (isEquipped) {
+                buttonHtml = `<button class="equipped-button" data-item-id="${item.id}" data-item-type="${item.type}" disabled>Equipado</button>`;
+            } else {
+                buttonHtml = `<button class="equip-button" data-item-id="${item.id}" data-item-type="${item.type}">Equipar</button>`;
+            }
+        } else {
+            buttonHtml = `<button class="buy-button" data-item-id="${item.id}" data-item-type="${item.type}">Comprar ${item.price}</button>`;
+        }
+
+        // Removed the view3DButton as per user request
+        const view3DButton = ''; // No more "View 3D" button
+
+        return `
+            <div class="catalog-item-card">
+                <div class="catalog-item-thumbnail">
+                    <img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}">
+                </div>
+                <h4>${escapeHtml(item.name)}</h4>
+                <div class="item-price">
+                    ${!isOwned ? `<img src="roglux_coins.png" alt="Coins" class="coins-icon">` : ''}
+                    ${!isOwned ? item.price : ''}
+                </div>
+                ${buttonHtml}
+                ${view3DButton}
+            </div>
+        `;
+    }).join('');
 }
 
 // Tab switching functionality
@@ -527,7 +1167,7 @@ function updateProfileTabs() {
     const tabPanels = document.querySelectorAll('.tab-panel');
 
     tabButtons.forEach(button => {
-        button.onclick = null; // Remove previous listeners to prevent multiple calls
+        button.onclick = null; 
         button.addEventListener('click', () => {
             const targetTab = button.dataset.tab;
 
@@ -543,7 +1183,7 @@ function updateProfileTabs() {
             // Special handling for 'friends' tab
             if (targetTab === 'friends') {
                 renderFriendLists();
-            } else if (targetTab === 'favorites') { // NEW: Handle favorites tab
+            } else if (targetTab === 'favorites') { 
                 renderFavoriteGamesList();
             }
         });
@@ -569,14 +1209,14 @@ function editProfile() {
     document.getElementById('status-input-inline').value = profile.status;
     
     showOnlyAuthSection('profile-edit-section'); 
-    setActiveNavLink(null); // No nav link active when forms are open
+    setActiveNavLink(null); 
 }
 
 function closeProfileEdit() {
     // This will hide the edit form and then re-show the profile section
     showOnlyAuthSection(''); 
-    showSection(document.getElementById('profile-section'));
-    setActiveNavLink('profile-link'); // Keep 'Perfil' active
+    showProfile(userManager.getCurrentUser()); 
+    setActiveNavLink('profile-link'); 
 }
 
 // Replace native dialogs
@@ -589,7 +1229,7 @@ function customAlert(message, title = 'Alerta') {
                 <div class="browser-dialog-title">${escapeHtml(title)}</div>
                 <div class="browser-dialog-message">${escapeHtml(message)}</div>
                 <div class="browser-dialog-buttons">
-                    <button class="browser-dialog-button">OK</button>
+                    <button class="browser-dialog-button" data-value="ok">OK</button>
                 </div>
             </div>
         `;
@@ -649,18 +1289,18 @@ function customPrompt(message, defaultValue = '', title = 'Pergunta') {
         input.focus();
         input.select();
         
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                overlay.querySelector('[data-value="ok"]').click();
+            }
+        });
+
         overlay.querySelectorAll('button').forEach(button => {
             button.addEventListener('click', (e) => {
                 const result = e.target.dataset.value === 'ok' ? input.value : null;
                 overlay.remove();
                 resolve(result);
             });
-        });
-        
-        input.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                overlay.querySelector('[data-value="ok"]').click();
-            }
         });
     });
 };
@@ -675,7 +1315,7 @@ function updateProfileLink() {
     const profileLink = document.getElementById('profile-link');
     const currentUser = userManager.getCurrentUser();
     
-    if (profileLink) { // Ensure profileLink exists on the page
+    if (profileLink) { 
         if (currentUser) {
             profileLink.textContent = currentUser;
             profileLink.onclick = function(e) {
@@ -728,7 +1368,7 @@ function renderFriendLists() {
             const safeFriend = typeof friend === 'string' ? friend : 'Desconhecido';
             const friendAvatarHtml = friendProfile.profilePicture 
                 ? `<img src="${escapeHtml(friendProfile.profilePicture)}" alt="${escapeHtml(safeFriend)} Avatar">`
-                : `${escapeHtml(safeFriend.charAt(0).toUpperCase())}`;
+                : `<div class="avatar-placeholder-small">${escapeHtml(safeFriend.charAt(0).toUpperCase())}</div>`; 
             return `
                 <div class="friend-card">
                     <div class="friend-avatar">${friendAvatarHtml}</div>
@@ -748,7 +1388,7 @@ function renderFriendLists() {
             const safeSender = typeof sender === 'string' ? sender : 'Desconhecido';
             const senderAvatarHtml = senderProfile.profilePicture 
                 ? `<img src="${escapeHtml(senderProfile.profilePicture)}" alt="${escapeHtml(safeSender)} Avatar">`
-                : `${escapeHtml(safeSender.charAt(0).toUpperCase())}`;
+                : `<div class="avatar-placeholder-small">${escapeHtml(safeSender.charAt(0).toUpperCase())}</div>`;
             return `
                 <div class="request-card">
                     <div class="friend-avatar">${senderAvatarHtml}</div>
@@ -772,7 +1412,7 @@ function renderFriendLists() {
             const safeReceiver = typeof receiver === 'string' ? receiver : 'Desconhecido';
             const receiverAvatarHtml = receiverProfile.profilePicture 
                 ? `<img src="${escapeHtml(receiverProfile.profilePicture)}" alt="${escapeHtml(safeReceiver)} Avatar">`
-                : `${escapeHtml(safeReceiver.charAt(0).toUpperCase())}`;
+                : `<div class="avatar-placeholder-small">${escapeHtml(safeReceiver.charAt(0).toUpperCase())}</div>`;
             return `
                 <div class="request-card">
                     <div class="friend-avatar">${receiverAvatarHtml}</div>
@@ -818,7 +1458,7 @@ async function searchUsers() {
         const safeUser = typeof user === 'string' ? user : 'Desconhecido';
         const userAvatarHtml = userProfile.profilePicture 
             ? `<img src="${escapeHtml(userProfile.profilePicture)}" alt="${escapeHtml(safeUser)} Avatar">`
-            : `${escapeHtml(safeUser.charAt(0).toUpperCase())}`;
+            : `<div class="avatar-placeholder-small">${escapeHtml(safeUser.charAt(0).toUpperCase())}</div>`;
 
         let buttonHtml;
         if (currentUserProfile.friends.includes(safeUser)) {
@@ -845,32 +1485,32 @@ async function searchUsers() {
 async function sendFriendRequest(receiverUsername) {
     const currentUser = userManager.getCurrentUser();
     if (!currentUser) {
-        alert('Você precisa estar logado para enviar pedidos de amizade.');
+        await alert('Você precisa estar logado para enviar pedidos de amizade.');
         return;
     }
 
     const result = profileManager.sendFriendRequest(currentUser, receiverUsername);
-    alert(result.message);
+    await alert(result.message);
     if (result.success) {
-        renderFriendLists(); // Re-render lists to update status
-        searchUsers(); // Re-render search results to update button status
+        renderFriendLists(); 
+        searchUsers(); 
     }
 }
 
 async function acceptFriendRequest(senderUsername) {
     const currentUser = userManager.getCurrentUser();
     if (!currentUser) {
-        alert('Você precisa estar logado para aceitar pedidos de amizade.');
+        await alert('Você precisa estar logado para aceitar pedidos de amizade.');
         return;
     }
 
     const result = await confirm(`Tem certeza que deseja aceitar o pedido de amizade de ${escapeHtml(senderUsername)}?`);
     if (result) {
         const acceptResult = profileManager.acceptFriendRequest(currentUser, senderUsername);
-        alert(acceptResult.message);
+        await alert(acceptResult.message);
         if (acceptResult.success) {
             renderFriendLists();
-            searchUsers(); // Update search results if still open
+            searchUsers(); 
         }
     }
 }
@@ -878,17 +1518,17 @@ async function acceptFriendRequest(senderUsername) {
 async function declineFriendRequest(senderUsername) {
     const currentUser = userManager.getCurrentUser();
     if (!currentUser) {
-        alert('Você precisa estar logado para recusar pedidos de amizade.');
+        await alert('Você precisa estar logado para recusar pedidos de amizade.');
         return;
     }
 
     const result = await confirm(`Tem certeza que deseja recusar o pedido de amizade de ${escapeHtml(senderUsername)}?`);
     if (result) {
         const declineResult = profileManager.declineFriendRequest(currentUser, senderUsername);
-        alert(declineResult.message);
+        await alert(declineResult.message);
         if (declineResult.success) {
             renderFriendLists();
-            searchUsers(); // Update search results if still open
+            searchUsers(); 
         }
     }
 }
@@ -918,11 +1558,11 @@ function renderFavoriteGamesList() {
             } else if (safeGameTitle === 'Work at a Pizza Place') {
                 imageSrc = 'thumbnail2.jpg';
             } else {
-                imageSrc = 'default_game_thumbnail.png'; // Fallback for unknown games
+                imageSrc = 'default_game_thumbnail.png'; 
             }
 
             return `
-                <div class="game-card game-card-favorite">
+                <div class="game-card game-card-favorite" data-game-title="${escapeHtml(safeGameTitle)}">
                     <div class="game-thumbnail">
                         <img src="${escapeHtml(imageSrc)}" alt="${escapeHtml(safeGameTitle)} Thumbnail">
                     </div>
@@ -932,9 +1572,6 @@ function renderFavoriteGamesList() {
                 </div>
             `;
         }).join('');
-        // Re-attach event listeners for "remove" buttons in this list
-        attachFavoriteToggleListeners(); 
-        attachPlayButtonListeners(); // Attach play button listeners for favorite games list
     }
 }
 
@@ -947,7 +1584,7 @@ function updateFeaturedGameCards() {
         const gameTitle = card.dataset.gameTitle;
         const favoriteButton = card.querySelector('.favorite-toggle-button');
         const gameThumbnail = card.querySelector('.game-thumbnail');
-        const playButton = card.querySelector('.play-button'); // Get play button
+        const playButton = card.querySelector('.play-button'); 
 
         // Ensure gameTitle is a string before operations, default to empty string if not
         const safeGameTitle = typeof gameTitle === 'string' ? gameTitle : '';
@@ -959,7 +1596,7 @@ function updateFeaturedGameCards() {
         } else if (safeGameTitle === 'Work at a Pizza Place') {
             imageSrc = 'thumbnail2.jpg';
         } else {
-            imageSrc = 'default_game_thumbnail.png'; // Fallback for unknown games
+            imageSrc = 'default_game_thumbnail.png'; 
         }
         
         if (gameThumbnail) {
@@ -985,8 +1622,10 @@ function updateFeaturedGameCards() {
                 favoriteButton.textContent = 'Favoritar';
                 favoriteButton.classList.add('add-favorite-button');
                 favoriteButton.classList.remove('remove-favorite-button');
-                favoriteButton.disabled = true; // Disable if not logged in
+                favoriteButton.disabled = true; 
             }
+            // Ensure data-game-title is set on the button itself for delegation
+            favoriteButton.setAttribute('data-game-title', safeGameTitle);
         }
 
         // Update play button state (it's always enabled now, login check is inside handler)
@@ -994,81 +1633,6 @@ function updateFeaturedGameCards() {
             // Set data-game-title attribute on play button for easier access
             playButton.setAttribute('data-game-title', safeGameTitle);
         }
-    });
-    attachFavoriteToggleListeners(); // Re-attach listeners after updating buttons
-    attachPlayButtonListeners(); // Attach play button listeners for featured games
-}
-
-// NEW: Centralized function to attach favorite toggle listeners
-function attachFavoriteToggleListeners() {
-    document.querySelectorAll('.favorite-toggle-button').forEach(button => {
-        // Remove existing listener to prevent duplicates
-        button.onclick = null; 
-        button.addEventListener('click', async function(e) {
-            const currentUser = userManager.getCurrentUser();
-            if (!currentUser) {
-                alert('Você precisa estar logado para favoritar jogos.');
-                return;
-            }
-
-            // Get the parent .game-card element to retrieve the game title
-            const gameCard = e.target.closest('.game-card');
-            if (!gameCard) {
-                console.error("Could not find parent .game-card for favorite button.");
-                alert("Erro ao identificar o jogo. Tente novamente.");
-                return;
-            }
-            const gameTitle = gameCard.dataset.gameTitle; 
-            
-            // Ensure gameTitle is a string, default to empty string if not
-            const safeGameTitle = typeof gameTitle === 'string' ? gameTitle : '';
-
-            const profile = profileManager.getProfile(currentUser);
-            let result;
-
-            // Use safeGameTitle for favorite operations
-            if (profile.favorites.includes(safeGameTitle)) {
-                result = profileManager.removeFavorite(currentUser, safeGameTitle);
-            } else {
-                result = profileManager.addFavorite(currentUser, safeGameTitle);
-            }
-            alert(result.message);
-            if (result.success) {
-                // Update favorite count on profile header if profile is visible
-                const favoriteCountElement = document.getElementById('favorite-count');
-                if (favoriteCountElement) {
-                    favoriteCountElement.textContent = profileManager.getProfile(currentUser).favorites.length;
-                }
-                updateFeaturedGameCards(); // Update buttons on main page
-                // If favorites tab is open, re-render it
-                if (document.getElementById('favorites-tab').classList.contains('active')) {
-                    renderFavoriteGamesList();
-                }
-            }
-        });
-    });
-}
-
-// NEW: Function to attach play button listeners
-function attachPlayButtonListeners() {
-    document.querySelectorAll('.play-button').forEach(button => {
-        button.onclick = null; // Remove existing listener to prevent duplicates
-        button.addEventListener('click', async function(e) {
-            e.preventDefault(); // Prevent default if any
-            const currentUser = userManager.getCurrentUser();
-            if (!currentUser) {
-                await alert('Espere um pouco aí! Primeiro logue para conseguir jogar.');
-                return;
-            }
-            
-            const gameTitle = e.target.dataset.gameTitle;
-            if (gameTitle) {
-                // Navigate to game.html with gameTitle as a query parameter
-                window.location.href = `game.html?game=${encodeURIComponent(gameTitle)}`;
-            } else {
-                alert("Não foi possível iniciar o jogo: título do jogo não encontrado.");
-            }
-        });
     });
 }
 
@@ -1090,6 +1654,12 @@ document.getElementById('community-link')?.addEventListener('click', function(e)
     showCommunity();
 });
 
+// NEW: Event listener for "Catalog" link
+document.getElementById('catalog-link')?.addEventListener('click', function(e) {
+    e.preventDefault();
+    showCatalog();
+});
+
 // NEW: Event listener for "Home" link
 document.getElementById('home-link')?.addEventListener('click', function(e) {
     e.preventDefault();
@@ -1099,7 +1669,12 @@ document.getElementById('home-link')?.addEventListener('click', function(e) {
 // NEW: Event listener for "Jogos" link
 document.getElementById('games-link')?.addEventListener('click', function(e) {
     e.preventDefault();
-    showMainContent(); // "Jogos" also leads to the main games display
+    // For game.html, "Jogos" link points back to index.html and shows main content
+    if (window.location.pathname.endsWith('game.html')) {
+        window.location.href = 'index.html'; // Navigate back to index.html
+    } else {
+        showMainContent(); 
+    }
 });
 
 document.getElementById('switch-to-register-inline')?.addEventListener('click', openRegisterModal);
@@ -1107,43 +1682,47 @@ document.getElementById('switch-to-login-inline')?.addEventListener('click', ope
 document.getElementById('close-settings-inline')?.addEventListener('click', hideCurrentAuthFormAndShowMainContent);
 document.getElementById('close-profile-edit-inline')?.addEventListener('click', closeProfileEdit);
 
-document.getElementById('login-form-inline')?.addEventListener('submit', function(e) {
+document.getElementById('login-form-inline')?.addEventListener('submit', async function(e) {
     e.preventDefault();
     const username = document.getElementById('username-inline').value;
     const password = document.getElementById('password-inline').value;
     
     const result = userManager.login(username, password);
     if (result.success) {
-        alert(`Bem-vindo de volta, ${username}!`);
-        hideCurrentAuthFormAndShowMainContent(); // Hide login form and show main content
+        await alert(`Bem-vindo de volta, ${username}!`);
+        hideCurrentAuthFormAndShowMainContent(); 
         updateProfileLink();
-        updateFeaturedGameCards(); // Update buttons after login
+        updateFeaturedGameCards(); 
+        updateUserCoinsDisplay(); 
+        startCoinRewardTimer(); // Start timer if login happens on a non-index page
     } else {
-        alert(result.message);
+        await alert(result.message);
     }
 });
 
-document.getElementById('register-form-inline')?.addEventListener('submit', function(e) {
+document.getElementById('register-form-inline')?.addEventListener('submit', async function(e) {
     e.preventDefault();
     const username = document.getElementById('reg-username-inline').value;
     const password = document.getElementById('reg-password-inline').value;
     const confirmPassword = document.getElementById('reg-confirm-password-inline').value;
 
     if (password !== confirmPassword) {
-        alert('As senhas não coincidem!');
+        await alert('As senhas não coincidem!');
         return;
     }
 
     const result = userManager.register(username, password);
     if (result.success) {
-        alert('Conta criada com sucesso! Faça login.');
-        openLoginModal(); // Go to login after successful registration
+        // After successful registration, initialize profile with default coins
+        profileManager.getProfile(username); 
+        await alert('Conta criada com sucesso! Faça login.');
+        openLoginModal(); 
     } else {
-        alert(result.message);
+        await alert(result.message);
     }
 });
 
-document.getElementById('settings-form-inline')?.addEventListener('submit', function(e) {
+document.getElementById('settings-form-inline')?.addEventListener('submit', async function(e) {
     e.preventDefault();
     const currentUsername = userManager.getCurrentUser();
     const currentPassword = document.getElementById('current-password-inline').value;
@@ -1152,7 +1731,7 @@ document.getElementById('settings-form-inline')?.addEventListener('submit', func
     const confirmNewPassword = document.getElementById('confirm-new-password-inline').value;
 
     if (newPassword && newPassword !== confirmNewPassword) {
-        alert('As novas senhas não coincidem!');
+        await alert('As novas senhas não coincidem!');
         return;
     }
 
@@ -1164,16 +1743,17 @@ document.getElementById('settings-form-inline')?.addEventListener('submit', func
     );
 
     if (result.success) {
-        alert('Conta atualizada com sucesso!');
-        hideCurrentAuthFormAndShowMainContent(); // Hide settings form and show main content
+        await alert('Conta atualizada com sucesso!');
+        hideCurrentAuthFormAndShowMainContent(); 
         updateProfileLink();
-        updateFeaturedGameCards(); // Update buttons if username changed
+        updateFeaturedGameCards(); 
+        updateUserCoinsDisplay(); 
     } else {
-        alert(result.message);
+        await alert(result.message);
     }
 });
 
-document.getElementById('profile-edit-form-inline')?.addEventListener('submit', function(e) {
+document.getElementById('profile-edit-form-inline')?.addEventListener('submit', async function(e) {
     e.preventDefault();
     
     const currentUser = userManager.getCurrentUser();
@@ -1185,12 +1765,13 @@ document.getElementById('profile-edit-form-inline')?.addEventListener('submit', 
     profileManager.updateProfile(currentUser, { bio, status });
     
     // Update UI
-    document.getElementById('profile-bio').textContent = bio;
-    document.querySelector('.profile-status').textContent = `Status: ${status}`;
+    // The showProfile(currentUser) call in closeProfileEdit will re-render everything
+    // For immediate feedback on the edit screen without full re-render, we could update here:
+    // document.getElementById('profile-bio').textContent = bio;
+    // document.querySelector('.profile-status').textContent = `Status: ${status}`;
     
     // Re-render the profile to reflect changes, including the picture if updated
-    showProfile(currentUser); // Go back to profile view
-    showOnlyAuthSection(''); // Hide the edit section after saving
+    closeProfileEdit(); 
 });
 
 // Event listener for profile picture input
@@ -1218,7 +1799,7 @@ document.getElementById('profile-picture-input')?.addEventListener('change', fun
 });
 
 // Event listener for remove profile picture button
-document.getElementById('remove-profile-picture')?.addEventListener('click', function() {
+document.getElementById('remove-profile-picture')?.addEventListener('click', async function() {
     const currentUser = userManager.getCurrentUser();
     if (currentUser) {
         profileManager.updateProfile(currentUser, { profilePicture: null });
@@ -1233,7 +1814,7 @@ document.getElementById('remove-profile-picture')?.addEventListener('click', fun
             profileAvatarImg.classList.add('hidden');
             avatarPlaceholder.classList.remove('hidden');
         }
-        alert('Foto de perfil removida.');
+        await alert('Foto de perfil removida.');
     }
 });
 
@@ -1248,56 +1829,225 @@ document.getElementById('user-search-input')?.addEventListener('keypress', funct
     }
 });
 
-// Initialize on load
-document.addEventListener('DOMContentLoaded', function() {
-    // Hide all secondary sections and auth forms initially
-    const profileSection = document.getElementById('profile-section');
-    if (profileSection) {
-        profileSection.classList.add('hidden');
-        profileSection.style.opacity = '0';
-    }
-    const communitySection = document.getElementById('community-section');
-    if (communitySection) {
-        communitySection.classList.add('hidden');
-        communitySection.style.opacity = '0';
-    }
-
-    const sectionsToHideCompletely = ['login-section', 'register-section', 'settings-section', 'profile-edit-section', 'create-blog-form', 'blog-detail', 'blog-list'];
-    sectionsToHideCompletely.forEach(id => {
-        const section = document.getElementById(id);
-        if (section) {
-            section.classList.add('hidden');
-            section.style.opacity = '0';
-        }
-    });
-
-    // Only show main content if we are on index.html
-    if (window.location.pathname === '/' || window.location.pathname.endsWith('index.html')) {
-        showMainContent(); 
-        updateProfileLink();
+// NEW: Event delegation for Catalog category buttons
+document.getElementById('catalog-section')?.addEventListener('click', function(e) {
+    if (e.target.classList.contains('category-button')) {
+        const category = e.target.dataset.category;
+        document.querySelectorAll('.catalog-categories .category-button').forEach(btn => btn.classList.remove('active'));
+        e.target.classList.add('active');
+        renderCatalogItems(category);
     }
 });
 
+// NEW: Event delegation for Catalog item actions (Buy, Equip)
+document.getElementById('catalog-items-grid')?.addEventListener('click', async function(e) {
+    const currentUser = userManager.getCurrentUser();
+    
+    const button = e.target;
+    const itemId = button.dataset.itemId;
+    const itemType = button.dataset.itemType;
+    const item = catalogManager.getItemById(itemId);
+
+    if (!item) {
+        await alert('Erro: Item não encontrado no catálogo.');
+        return;
+    }
+
+    if (button.classList.contains('buy-button')) {
+        if (!currentUser) {
+            await alert('Você precisa estar logado para interagir com o catálogo.');
+            return;
+        }
+
+        const confirmBuy = await confirm(`Deseja comprar "${item.name}" por ${item.price} Coins?`);
+        if (confirmBuy) {
+            const subtractResult = profileManager.subtractCoins(currentUser, item.price);
+            if (subtractResult.success) {
+                const addResult = profileManager.addItemToInventory(currentUser, item.id);
+                if (addResult.success) {
+                    await alert(`Você comprou "${item.name}"!`);
+                    updateUserCoinsDisplay(); 
+                    renderCatalogItems(document.querySelector('.category-button.active').dataset.category); 
+                } else {
+                    // This case should ideally not happen if inventory check is correct
+                    await alert(addResult.message); 
+                    // Refund coins if item could not be added to inventory
+                    profileManager.addCoins(currentUser, item.price);
+                    updateUserCoinsDisplay();
+                }
+            } else {
+                await alert(subtractResult.message);
+            }
+        }
+    } else if (button.classList.contains('equip-button')) {
+        if (!currentUser) {
+            await alert('Você precisa estar logado para interagir com o catálogo.');
+            return;
+        }
+        const equipResult = profileManager.equipItem(currentUser, item.id, item.type);
+        if (equipResult.success) {
+            await alert(`"${item.name}" equipado com sucesso!`);
+            updateEquippedAvatarItems(); 
+            renderCatalogItems(document.querySelector('.category-button.active').dataset.category); 
+            // Simulate a socket event for equipping an item
+            console.log(`[SOCKET_EVENT] User ${currentUser} equipped item: { id: "${item.id}", name: "${item.name}", type: "${item.type}" }`);
+        } else {
+            await alert(equipResult.message);
+        }
+    }
+    // Removed the 'view-3d-button' handling
+});
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', function() {
+    const isIndexPage = window.location.pathname === '/' || window.location.pathname.endsWith('index.html');
+
+    if (isIndexPage) {
+        // Hide all secondary sections and auth forms initially
+        const profileSection = document.getElementById('profile-section');
+        if (profileSection) {
+            profileSection.classList.add('hidden');
+            profileSection.style.opacity = '0';
+        }
+        const communitySection = document.getElementById('community-section');
+        if (communitySection) {
+            communitySection.classList.add('hidden');
+            communitySection.style.opacity = '0';
+        }
+        const catalogSection = document.getElementById('catalog-section');
+        if (catalogSection) {
+            catalogSection.classList.add('hidden');
+            catalogSection.style.opacity = '0';
+        }
+
+        const sectionsToHideCompletely = ['login-section', 'register-section', 'settings-section', 'profile-edit-section', 'create-blog-form', 'blog-detail', 'blog-list'];
+        sectionsToHideCompletely.forEach(id => {
+            const section = document.getElementById(id);
+            if (section) {
+                section.classList.add('hidden');
+                section.style.opacity = '0';
+            }
+        });
+
+        showMainContent(); 
+        updateProfileLink();
+        updateFeaturedGameCards(); 
+        updateUserCoinsDisplay(); 
+        stopCoinRewardTimer(); // Ensure timer is stopped on index page
+    } else {
+        // Logic for non-index.html pages (e.g., game.html)
+        const params = new URLSearchParams(window.location.search);
+        const gameTitle = params.get('game');
+        const gameTitleDisplay = document.getElementById('game-title-display');
+        const gameTitlePlaceholder = document.getElementById('game-title-placeholder');
+
+        if (gameTitleDisplay) { // Check if elements exist (they won't on index.html)
+            if (gameTitle) {
+                gameTitleDisplay.textContent = gameTitle;
+                if (gameTitlePlaceholder) gameTitlePlaceholder.textContent = gameTitle;
+                document.title = `Rogold - Jogando ${gameTitle}`;
+            } else {
+                gameTitleDisplay.textContent = 'Jogo Desconhecido';
+                if (gameTitlePlaceholder) gameTitlePlaceholder.textContent = 'Desconhecido';
+                document.title = 'Rogold - Jogo Desconhecido';
+            }
+        }
+        
+        // Set active nav link (always Home/Jogos when on a game page)
+        const homeLink = document.getElementById('home-link');
+        if (homeLink) homeLink.classList.remove('active');
+        const gamesLink = document.getElementById('games-link');
+        if (gamesLink) gamesLink.classList.add('active');
+
+        startCoinRewardTimer(); // Start coin reward timer when on a non-index page
+    }
+
+    // --- Event Delegation for Play and Favorite buttons ---
+    document.body.addEventListener('click', async function(e) {
+        // Handle Play Button clicks
+        if (e.target.classList.contains('play-button')) {
+            e.preventDefault(); 
+            const currentUser = userManager.getCurrentUser();
+            if (!currentUser) {
+                await alert('Espere um pouco aí! Primeiro logue para conseguir jogar.');
+                return;
+            }
+            
+            const gameTitle = e.target.dataset.gameTitle;
+            if (gameTitle) {
+                window.location.href = `game.html?game=${encodeURIComponent(gameTitle)}`;
+            } else {
+                await alert("Não foi possível iniciar o jogo: título do jogo não encontrado.");
+            }
+        } 
+        // Handle Favorite Toggle Button clicks
+        else if (e.target.classList.contains('favorite-toggle-button')) {
+            e.preventDefault(); 
+            const currentUser = userManager.getCurrentUser();
+            if (!currentUser) {
+                await alert('Você precisa estar logado para favoritar jogos.');
+                return;
+            }
+
+            // Get the game title from the button's dataset
+            const gameTitle = e.target.dataset.gameTitle; 
+            
+            // Ensure gameTitle is a string, default to empty string if not
+            const safeGameTitle = typeof gameTitle === 'string' ? gameTitle.trim() : '';
+            
+            if (safeGameTitle === '') {
+                await alert("Não foi possível identificar o jogo. O título está vazio.");
+                console.error("Game title is empty after parsing dataset and trimming.", e.target);
+                return;
+            }
+
+            const profile = profileManager.getProfile(currentUser);
+            let result;
+
+            // Use safeGameTitle for favorite operations
+            if (profile.favorites.includes(safeGameTitle)) {
+                result = profileManager.removeFavorite(currentUser, safeGameTitle);
+            } else {
+                result = profileManager.addFavorite(currentUser, safeGameTitle);
+            }
+            await alert(result.message); 
+            if (result.success) {
+                // Update favorite count on profile header if profile is visible
+                const favoriteCountElement = document.getElementById('favorite-count');
+                if (favoriteCountElement) {
+                    favoriteCountElement.textContent = profileManager.getProfile(currentUser).favorites.length;
+                }
+                updateFeaturedGameCards(); 
+                // If favorites tab is open, re-render it
+                if (document.getElementById('favorites-tab').classList.contains('active')) {
+                    renderFavoriteGamesList(); 
+                }
+            }
+        }
+    });
+    // --- END Event Delegation ---
+});
+
 // Comunidade - Blog creation
-document.getElementById('blog-create-form')?.addEventListener('submit', function(e) {
+document.getElementById('blog-create-form')?.addEventListener('submit', async function(e) {
     e.preventDefault();
     const title = document.getElementById('blog-title').value;
     const message = document.getElementById('blog-message').value;
     const currentUser = userManager.getCurrentUser();
     
     if (!currentUser) {
-        alert('Você precisa estar logado para criar um tópico.');
+        await alert('Você precisa estar logado para criar um tópico.');
         return;
     }
     
     communityManager.createBlog(title, message, currentUser);
-    document.getElementById('blog-title').value = ''; // Clear title
-    document.getElementById('blog-message').value = ''; // Clear message
-    hideCreateBlogForm(); // Hide form and show blog list
+    document.getElementById('blog-title').value = ''; 
+    document.getElementById('blog-message').value = ''; 
+    hideCreateBlogForm(); 
 });
 
 // Comunidade - Message submission
-document.getElementById('message-form')?.addEventListener('submit', function(e) {
+document.getElementById('message-form')?.addEventListener('submit', async function(e) {
     e.preventDefault();
     if (!communityManager.currentBlog) return;
     
@@ -1305,7 +2055,7 @@ document.getElementById('message-form')?.addEventListener('submit', function(e) 
     const currentUser = userManager.getCurrentUser();
     
     if (!currentUser) {
-        alert('Você precisa estar logado para responder.');
+        await alert('Você precisa estar logado para responder.');
         return;
     }
     
@@ -1355,14 +2105,14 @@ function openBlog(blogId) {
     // Show detail view and hide blog list
     hideSection(document.getElementById('blog-list')); 
     showOnlyAuthSection('blog-detail'); 
-    setActiveNavLink('community-link'); // Keep 'Comunidade' active
+    setActiveNavLink('community-link'); 
 }
 
 function hideBlogDetail() {
     showSection(document.getElementById('blog-list')); 
     showOnlyAuthSection(''); 
     communityManager.currentBlog = null;
-    setActiveNavLink('community-link'); // Keep 'Comunidade' active
+    setActiveNavLink('community-link'); 
 }
 
 function loadBlogMessages() {
@@ -1405,14 +2155,14 @@ function showCreateBlogForm() {
     }
     hideSection(document.getElementById('blog-list')); 
     showOnlyAuthSection('create-blog-form'); 
-    setActiveNavLink('community-link'); // Keep 'Comunidade' active
+    setActiveNavLink('community-link'); 
 }
 
 function hideCreateBlogForm() {
     showSection(document.getElementById('blog-list')); 
     showOnlyAuthSection(''); 
     document.getElementById('blog-create-form')?.reset();
-    setActiveNavLink('community-link'); // Keep 'Comunidade' active
+    setActiveNavLink('community-link'); 
 }
 
 // Re-defining these for clarity in global scope if called from HTML inline
@@ -1424,6 +2174,8 @@ window.openSettingsModal = openSettingsModal;
 window.hideProfile = hideProfile;
 window.showCommunity = showCommunity;
 window.hideCommunity = hideCommunity;
+window.showCatalog = showCatalog; 
+window.hideCatalog = hideCatalog; 
 window.showCreateBlogForm = showCreateBlogForm;
 window.hideCreateBlogForm = hideCreateBlogForm;
 window.hideBlogDetail = hideBlogDetail;
@@ -1433,3 +2185,52 @@ window.openBlog = openBlog;
 window.sendFriendRequest = sendFriendRequest; 
 window.acceptFriendRequest = acceptFriendRequest; 
 window.declineFriendRequest = declineFriendRequest;
+
+// Coin Reward Timer Logic
+let coinRewardIntervalId = null;
+const COIN_REWARD_AMOUNT = 500;
+const COIN_REWARD_INTERVAL_MS = 20 * 60 * 1000; // 20 minutes
+
+function startCoinRewardTimer() {
+    // Clear any existing timer to prevent multiple timers running
+    if (coinRewardIntervalId) {
+        clearInterval(coinRewardIntervalId);
+        coinRewardIntervalId = null;
+    }
+
+    const currentUser = userManager.getCurrentUser();
+    if (!currentUser) {
+        console.log('User not logged in, coin reward timer not started.');
+        return;
+    }
+
+    // Timer only runs if not on the index page
+    const isIndexPage = window.location.pathname === '/' || window.location.pathname.endsWith('index.html');
+    if (isIndexPage) {
+        console.log('On index page, coin reward timer not started.');
+        return;
+    }
+
+    console.log(`Starting coin reward timer for ${currentUser}. Rewarding ${COIN_REWARD_AMOUNT} coins every ${COIN_REWARD_INTERVAL_MS / 60000} minutes.`);
+
+    coinRewardIntervalId = setInterval(async () => {
+        const userNow = userManager.getCurrentUser();
+        if (userNow) {
+            profileManager.addCoins(userNow, COIN_REWARD_AMOUNT);
+            await alert(`Parabéns, ${userNow}! Você ganhou ${COIN_REWARD_AMOUNT} Goldbucks por passar tempo no Rogold!`);
+            // Update UI if the user navigates back to a relevant page after the alert
+            updateUserCoinsDisplay();
+        } else {
+            // User logged out while timer was active, stop the timer
+            stopCoinRewardTimer();
+        }
+    }, COIN_REWARD_INTERVAL_MS);
+}
+
+function stopCoinRewardTimer() {
+    if (coinRewardIntervalId) {
+        console.log('Stopping coin reward timer.');
+        clearInterval(coinRewardIntervalId);
+        coinRewardIntervalId = null;
+    }
+}

@@ -4,8 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rogold - O mundo dos jogos!</title>
-    <link rel="stylesheet" href="stylefront.css">
-     <link rel="icon" href="Roblox_icon_2006.svg" type="image/x-icon">
+    <link rel="stylesheet" href="styles.css">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
+            }
+        }
+    </script>
 </head>
 <body>
     <div class="container">
@@ -16,7 +23,7 @@
                 <ul class="menu">
                     <li><a href="#" id="home-link" class="active">Home</a></li>
                     <li><a href="#" id="games-link">Jogos</a></li>
-                    <li><a href="#">Catálogo</a></li>
+                    <li><a href="#" id="catalog-link">Catálogo</a></li>
                     <li><a href="#" id="profile-link">Perfil</a></li>
                     <li><a href="#" id="community-link">Comunidade</a></li>
                 </ul>
@@ -56,6 +63,11 @@
                         <div class="stat-item">
                             <span class="stat-number">0</span>
                             <span class="stat-label">Visitas</span>
+                        </div>
+                        <!-- NEW: Coins display in profile -->
+                        <div class="stat-item">
+                            <span id="user-coins" class="stat-number coins-value">0</span>
+                            <span class="stat-label">Coins</span>
                         </div>
                     </div>
                 </div>
@@ -131,11 +143,40 @@
                 </div>
             </section>
 
+            <!-- NEW: Catalog Section -->
+            <section id="catalog-section" class="hidden">
+                <div class="catalog-header">
+                    <button class="back-button" onclick="hideCatalog()">← Voltar</button>
+                    <h2>Catálogo Rogold</h2>
+                    <div class="user-roblox-account-info">
+                        <img src="roglux_coins.png" alt="Coins" class="coins-icon">
+                        <span id="current-catalog-coins">0</span>
+                    </div>
+                </div>
+
+                <div class="catalog-content">
+                    <div class="avatar-preview-container">
+                        <h3>Meu Personagem 3D</h3>
+                        <div class="avatar-display" id="avatar-preview-display">
+                            <!-- Three.js canvas for avatar preview will be appended here -->
+                        </div>
+                    </div>
+
+                    <div class="catalog-items">
+                        <div class="catalog-categories">
+                            <button class="category-button active" data-category="all">Todos</button>
+                            <button class="category-button" data-category="hat">Chapéus</button>
+                        </div>
+                        <div class="items-grid" id="catalog-items-grid">
+                            <p class="empty-message">Nenhum item disponível no catálogo.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Add Community Section -->
             <section id="community-section" class="hidden">
                 <div class="community-header">
-                    <button class="back-button" onclick="hideCommunity()">← Voltar</button>
-                    <h2>Comunidade Rogold</h2>
                     <button class="primary-button" onclick="showCreateBlogForm()">Criar Novo Tópico</button>
                 </div>
 
@@ -337,6 +378,6 @@
     </div>
 
     <!-- Link to external JavaScript file -->
-    <script src="index.js"></script>
+    <script type="module" src="index.js"></script>
 </body>
 </html>
