@@ -576,7 +576,6 @@ class ThreeDViewer {
 
         if (accessoryType === 'hat') {
             // Base Y position for hats on a 1-unit tall avatar (assuming 1 unit is head top)
-            offset = (avatarHeight.y * 0.2);
 
             if (originalSize.y > 0) {
                 let scaleFactor = targetVisualHeight / originalSize.y;
@@ -585,7 +584,7 @@ class ThreeDViewer {
                 // or if they need a different visual prominence.
                 if (modelPath.includes('doge_roblox_hat.glb')) {
                     scaleFactor *= 1.5; // Make doge hat larger
-                    offset.y = 1.15; // Move up for larger hat
+                    offset.y = avatarHeight * 2; // topo da cabeça
                     offset.z = 0.05; // Slightly forward
                 } else if (modelPath.includes('roblox_r_baseball_cap_r6.glb')) {
                     scaleFactor *= 1.2; // Slightly larger for baseball cap
