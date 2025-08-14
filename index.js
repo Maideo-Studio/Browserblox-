@@ -572,7 +572,7 @@ class ThreeDViewer {
 
     if (modelPath.includes('doge_roblox_hat.glb')) {
         scaleFactor *= 0.3;
-        offset.y = 1.15;
+        offset.y = 1.05;
         offset.z = -0.05;
         rotation.y = 0;         // frente
         rotation.x = 0;         // garante que não está inclinado
