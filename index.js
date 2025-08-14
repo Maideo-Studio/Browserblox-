@@ -581,7 +581,7 @@ class ThreeDViewer {
         scaleFactor *= 0.3;
         offset.y = 1.08;
         offset.z = 0.05;
-        rotation.y = 0;         // frente
+        rotation.y = Math.PI / 2;  // 90 graus        // frente
         rotation.x = 0;
         rotation.z = 0;
     } else if (modelPath.includes('roblox_fedora.glb')) {
