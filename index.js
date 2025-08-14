@@ -574,8 +574,8 @@ class ThreeDViewer {
         scaleFactor *= 0.8;
         offset.y = 1.15;
         offset.z = 0.05;
-        rotation.y = Math.PI * 1; // exemplo: gira levemente no eixo Y
-        rotation.z = Math.PI * 1; // exemplo: gira levemente no eixo Y
+        rotation.y = Math.PI * -1; // exemplo: gira levemente no eixo Y
+        rotation.z = Math.PI * -1; // exemplo: gira levemente no eixo Y
 
     } else if (modelPath.includes('roblox_r_baseball_cap_r6.glb')) {
         scaleFactor *= 0.8;
