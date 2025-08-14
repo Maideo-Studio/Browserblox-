@@ -567,27 +567,30 @@ class ThreeDViewer {
     if (!this.currentModel) return;
 
     let scaleFactor = 1;
-    let offset = { x: 0, y: 0, z: 0 };     // posição
-    let rotation = { x: 0, y: 0, z: 0 };   // rotação em radianos
+    let offset = { x: 0, y: 0, z: 0 };
+    let rotation = { x: 0, y: 0, z: 0 };
 
     if (modelPath.includes('doge_roblox_hat.glb')) {
-        scaleFactor *= 0.8;
+        scaleFactor *= 0.3;
         offset.y = 1.15;
         offset.z = 0.05;
-        rotation.y = Math.PI * -1; // exemplo: gira levemente no eixo Y
-        rotation.z = Math.PI * -1; // exemplo: gira levemente no eixo Y
-
+        rotation.y = 0;         // frente
+        rotation.x = 0;         // garante que não está inclinado
+        rotation.z = 0;         // garante que não está rotacionado lateral
     } else if (modelPath.includes('roblox_r_baseball_cap_r6.glb')) {
-        scaleFactor *= 0.8;
+        scaleFactor *= 0.3;
         offset.y = 1.08;
         offset.z = 0.05;
-        rotation.x = Math.PI * 0.02; // exemplo: inclina um pouco no eixo X
-
+        rotation.y = 0;         // frente
+        rotation.x = 0;
+        rotation.z = 0;
     } else if (modelPath.includes('roblox_fedora.glb')) {
-        scaleFactor *= 0.8;
+        scaleFactor *= 0.3;
         offset.y = 1.08;
         offset.z = 0.05;
-        rotation.y = Math.PI * -0.03; // exemplo: vira levemente pro outro lado
+        rotation.y = 0;         // frente
+        rotation.x = 0;
+        rotation.z = 0;
     }
 
     // aplica escala
@@ -599,13 +602,14 @@ class ThreeDViewer {
     accessoryModel.position.z += offset.z;
 
     // aplica rotação
-    accessoryModel.rotation.x += rotation.x;
-    accessoryModel.rotation.y += rotation.y;
-    accessoryModel.rotation.z += rotation.z;
+    accessoryModel.rotation.x = rotation.x;
+    accessoryModel.rotation.y = rotation.y;
+    accessoryModel.rotation.z = rotation.z;
 
     // adiciona ao avatar
     this.currentModel.add(accessoryModel);
 }
+
 
     destroy() {
         this.stopAnimation();
