@@ -45,7 +45,7 @@ let controlOverride = localStorage.getItem('controlOverride'); // 'pc', 'mobile'
 
 let renderTarget, postScene, postCamera;
 
-let socket = io();
+let socket;
 let otherPlayers = {};
 let playerId;
 
@@ -535,17 +535,42 @@ function initSocket() {
                 remotePlayer.userData.targetQuaternion = targetQuaternion;
 
                 // Update animation based on server state
-                if (playerData.isMoving) {
+                if (playerData.isInAir) {
+
+                    // Jump pose for remote player
+
+                    const jumpAngle = -Math.PI;
+
+                    remotePlayer.leftArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.leftArm.rotation.x, jumpAngle, 0.3);
+
+                    remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, jumpAngle, 0.3);
+
+                    remotePlayer.leftLeg.rotation.x = THREE.MathUtils.lerp(remotePlayer.leftLeg.rotation.x, 0, 0.2);
+
+                    remotePlayer.rightLeg.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightLeg.rotation.x, 0, 0.2);
+
+                } else if (playerData.isMoving) {
+
                     const swingAngle = Math.sin(Date.now() * 0.01) * 0.8;
+
                     remotePlayer.leftArm.rotation.x = swingAngle;
+
                     remotePlayer.rightArm.rotation.x = -swingAngle;
+
                     remotePlayer.leftLeg.rotation.x = -swingAngle;
+
                     remotePlayer.rightLeg.rotation.x = swingAngle;
+
                 } else {
-                    remotePlayer.leftArm.rotation.x = 0;
-                    remotePlayer.rightArm.rotation.x = 0;
-                    remotePlayer.leftLeg.rotation.x = 0;
-                    remotePlayer.rightLeg.rotation.x = 0;
+
+                    remotePlayer.leftArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.leftArm.rotation.x, 0, 0.2);
+
+                    remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, 0, 0.2);
+
+                    remotePlayer.leftLeg.rotation.x = THREE.MathUtils.lerp(remotePlayer.leftLeg.rotation.x, 0, 0.2);
+
+                    remotePlayer.rightLeg.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightLeg.rotation.x, 0, 0.2);
+
                 }
                 
                 // Update colors if they have changed
@@ -1721,7 +1746,8 @@ function animate() {
             y: player.position.y,
             z: player.position.z,
             rotation: player.rotation.y,
-            isMoving: direction.length() > 0.001
+            isMoving: direction.length() > 0.001,
+            isInAir: !canJump // <-- send whether player is in the air (jumping/falling)
         });
         lastSentTime = time;
     }
@@ -1763,12 +1789,6 @@ function animate() {
             otherPlayer.rotation.y += delta * 2;
             // Optionally, add a little bounce:
             otherPlayer.position.y = 3 + Math.abs(Math.sin(otherPlayer.animationTime) * 0.2);
-        } else {
-            // Reset animation if not dancing (optional)
-            otherPlayer.leftArm.rotation.x = 0;
-            otherPlayer.rightArm.rotation.x = 0;
-            otherPlayer.leftLeg.rotation.x = 0;
-            otherPlayer.rightLeg.rotation.x = 0;
         }
     });
 
@@ -1874,4 +1894,4 @@ window.addEventListener('mousemove', (event) => {
     mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
 });
 
-window.addEventListener('click', launchRocket);
+window.addEventListener('click', launchRocket);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
