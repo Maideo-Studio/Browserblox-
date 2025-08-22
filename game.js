@@ -1604,6 +1604,7 @@ function createExplosion(position) {
 
     animateRocket();
 });
+    }
 }
 
 // Unequip function
