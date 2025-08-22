@@ -1525,7 +1525,6 @@ function launchRocket() {
             direction: direction.toArray(),
             maxDistance: maxDist
         });
-    }
 
     rocket.lookAt(targetPoint);
     scene.add(rocket);
@@ -1613,6 +1612,8 @@ function createExplosion(position) {
 
     animateRocket();
 }
+}
+
 
 // Unequip function
 function unequipTool() {
