@@ -627,45 +627,6 @@ socket.on("remoteUnequip", (data) => {
     remotePlayer.userData.equipAnimProgress = 0;
 });
 
-socket.on("remoteLaunchRocket", (data) => {
-    const rocketGeometry = new THREE.BoxGeometry(1, 1, 1);
-    const textureLoader = new THREE.TextureLoader();
-    const texture = textureLoader.load('roblox-stud.png');
-    const rocketMaterial = new THREE.MeshBasicMaterial({
-        map: texture,
-        color: new THREE.Color('#89CFF0'),
-        blending: THREE.MultiplyBlending,
-        transparent: true
-    });
-    const rocket = new THREE.Mesh(rocketGeometry, rocketMaterial);
-
-    rocket.position.fromArray(data.position);
-    const direction = new THREE.Vector3().fromArray(data.direction).normalize();
-    rocket.lookAt(new THREE.Vector3().fromArray(data.position).add(direction.clone().multiplyScalar(data.maxDistance)));
-
-    scene.add(rocket);
-
-    const speed = 0.07;
-    let travelledDistance = 0;
-    const maxTravel = data.maxDistance;
-
-    function animateRocket() {
-        rocket.position.add(direction.clone().multiplyScalar(speed));
-        travelledDistance += speed;
-
-        if (travelledDistance >= maxTravel) {
-            createExplosion(rocket.position);
-            scene.remove(rocket);
-            return;
-        }
-
-        requestAnimationFrame(animateRocket);
-    }
-
-    animateRocket();
-});
-
-
 
     socket.on('stopDance', (dancerId) => {
         if (dancerId && otherPlayers[dancerId]) {
@@ -1510,15 +1471,24 @@ function launchRocket() {
     canShoot = false;
     setTimeout(() => { canShoot = true; }, cooldownTime);
 
-    // Pega posição e direção
+    const rocketGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const textureLoader = new THREE.TextureLoader();
+    const texture = textureLoader.load('roblox-stud.png');
+    const rocketMaterial = new THREE.MeshBasicMaterial({map: texture,
+  color: new THREE.Color('#89CFF0'),
+  blending: THREE.MultiplyBlending,
+  transparent: true});
+    const rocket = new THREE.Mesh(rocketGeometry, rocketMaterial);
+
     const startPos = new THREE.Vector3();
     rocketLauncherModel.getWorldPosition(startPos);
-    raycaster.setFromCamera(mouse, camera);
-    const direction = raycaster.ray.direction.clone().normalize();
-    const maxDist = maxDistance;
-    const targetPoint = startPos.clone().add(direction.clone().multiplyScalar(maxDist));
+    rocket.position.copy(startPos);
 
-    // Notifica o servidor
+    raycaster.setFromCamera(mouse, camera);
+
+    const direction = raycaster.ray.direction.clone().normalize();
+    const targetPoint = startPos.clone().add(direction.multiplyScalar(maxDistance));
+
     if (socket && socket.connected) {
         socket.emit("launchRocket", {
             position: startPos.toArray(),
@@ -1597,6 +1567,28 @@ function createExplosion(position) {
     });
 }
     
+    socket.on("remoteLaunchRocket", (data) => {
+    const rocketGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const textureLoader = new THREE.TextureLoader();
+    const texture = textureLoader.load('roblox-stud.png');
+    const rocketMaterial = new THREE.MeshBasicMaterial({
+        map: texture,
+        color: new THREE.Color('#89CFF0'),
+        blending: THREE.MultiplyBlending,
+        transparent: true
+    });
+    const rocket = new THREE.Mesh(rocketGeometry, rocketMaterial);
+
+    rocket.position.fromArray(data.position);
+    const direction = new THREE.Vector3().fromArray(data.direction).normalize();
+    rocket.lookAt(new THREE.Vector3().fromArray(data.position).add(direction.clone().multiplyScalar(data.maxDistance)));
+
+    scene.add(rocket);
+
+    const speed = 0.07;
+    let travelledDistance = 0;
+    const maxTravel = data.maxDistance;
+
     function animateRocket() {
         rocket.position.add(direction.clone().multiplyScalar(speed));
         travelledDistance += speed;
@@ -1611,9 +1603,8 @@ function createExplosion(position) {
     }
 
     animateRocket();
+});
 }
-}
-
 
 // Unequip function
 function unequipTool() {
