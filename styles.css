@@ -469,6 +469,16 @@ body {
     text-shadow: 0 0 2px #00ffe7;
 }
 
+.toolbox {
+    width: 200;
+    height: 200;
+    background-color: whitesmoke;
+}
+
+.toolbox:hover {
+    cursor: url('cursor2.png'), auto;
+}
+
 /* Menu Button (top left) */
 #menu-btn {
     position: absolute;
