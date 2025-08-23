@@ -461,35 +461,19 @@ body {
 }
 
 .toolbox {
-  position: fixed;
-  top: 80%;
-  left: 50px;
-  transform: translateY(-50%);
+  width: 50px;
+  height: 50px;
+  background-color: rgba(255, 255, 255, 0.5); /* branco meio transparente */
+  border: 2px solid black; /* borda preta */
+  border-radius: 6px;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px;
-  background: rgba(30, 30, 30, 0.9);
-  border-radius: 12px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.4);
-}
-
-/* Botões dentro do toolbox */
-.toolbox button {
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 8px;
-  background: #444;
-  color: white;
-  font-size: 18px;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+  font-size: 24px;
+  color: black;
   cursor: pointer;
-  transition: 0.2s;
-}
-
-.toolbox button:hover {
-  background: #666;
-  transform: scale(1.1);
+  user-select: none;
 }
 
 /* Menu Button (top left) */
