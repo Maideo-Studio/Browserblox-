@@ -600,6 +600,34 @@ function initSocket() {
         }
     });
 
+    // Quando outro player equipa
+socket.on("remoteEquip", (data) => {
+    const remotePlayer = otherPlayers[data.playerId];
+    if (!remotePlayer) return;
+
+    remotePlayer.userData.equippedTool = data.tool;
+    remotePlayer.userData.isEquipping = true;
+    remotePlayer.userData.equipAnimProgress = 0;
+
+    // Cria modelo na mão do outro player (se ainda não existir)
+    if (!remotePlayer.userData.rocketLauncherModel) {
+        const model = rocketLauncherModel.clone();
+        model.visible = true;
+        remotePlayer.rightArm.add(model);
+        remotePlayer.userData.rocketLauncherModel = model;
+    }
+});
+
+// Quando outro player desequipa
+socket.on("remoteUnequip", (data) => {
+    const remotePlayer = otherPlayers[data.playerId];
+    if (!remotePlayer) return;
+
+    remotePlayer.userData.isUnequipping = true;
+    remotePlayer.userData.equipAnimProgress = 0;
+});
+
+
     socket.on('stopDance', (dancerId) => {
         if (dancerId && otherPlayers[dancerId]) {
             otherPlayers[dancerId].isDancing = false;
@@ -1431,6 +1459,10 @@ function equipRocketLauncher() {
     rocketLauncherModel.visible = true;
     equippedTool = 'rocketLauncher';
 
+    if (socket && socket.connected) {
+        socket.emit("equipTool", { tool: "rocketLauncher" });
+    }
+
     // Highlight button
     document.getElementById('equip-tool-btn').classList.add('equipped');
 }
@@ -1458,55 +1490,6 @@ function launchRocket() {
 
     const direction = raycaster.ray.direction.clone().normalize();
     const targetPoint = startPos.clone().add(direction.multiplyScalar(maxDistance));
-
-    if (socket && socket.connected) {
-        socket.emit('launchRocket', {
-            start: { x: startPos.x, y: startPos.y, z: startPos.z },
-            dir: { x: direction.x, y: direction.y, z: direction.z }
-        });
-    }
-
-    socket.on('spawnRocket', (data) => {
-    const start = new THREE.Vector3(data.start.x, data.start.y, data.start.z);
-    const dir = new THREE.Vector3(data.dir.x, data.dir.y, data.dir.z).normalize();
-
-    createRocket(start, dir);
-});
-
-    function createRocket(startPos, direction) {
-    const rocketGeometry = new THREE.BoxGeometry(1, 1, 1);
-    const textureLoader = new THREE.TextureLoader();
-    const texture = textureLoader.load('roblox-stud.png');
-    const rocketMaterial = new THREE.MeshBasicMaterial({
-        map: texture,
-        color: new THREE.Color('#89CFF0'),
-        blending: THREE.MultiplyBlending,
-        transparent: true
-    });
-
-    const rocket = new THREE.Mesh(rocketGeometry, rocketMaterial);
-    rocket.position.copy(startPos);
-    rocket.lookAt(startPos.clone().add(direction));
-    scene.add(rocket);
-
-    const speed = 0.07;
-    let travelledDistance = 0;
-    const maxTravel = 200;
-
-    function animateRocket() {
-        rocket.position.add(direction.clone().multiplyScalar(speed));
-        travelledDistance += speed;
-
-        if (travelledDistance >= maxTravel) {
-            createExplosion(rocket.position);
-            scene.remove(rocket);
-            return;
-        }
-
-        requestAnimationFrame(animateRocket);
-    }
-    animateRocket();
-}
 
     rocket.lookAt(targetPoint);
 
@@ -1604,6 +1587,10 @@ function unequipTool() {
     rocketLauncherModel.visible = false;
     equippedTool = null;
     player.rightArm.rotation.x = 0; // Reset arm
+
+    if (socket && socket.connected) {
+        socket.emit("unequipTool", { tool: "rocketLauncher" });
+    }
     document.getElementById('equip-tool-btn').classList.remove('equipped');
 }
 
@@ -1671,6 +1658,40 @@ function animate() {
             remotePlayer.quaternion.slerp(remotePlayer.userData.targetQuaternion, 0.2);
         }
     }
+
+    for (const id in otherPlayers) {
+    const remotePlayer = otherPlayers[id];
+    const model = remotePlayer.userData.rocketLauncherModel;
+
+    if (!model) continue;
+
+    // EQUIP animação
+    if (remotePlayer.userData.isEquipping) {
+        remotePlayer.userData.equipAnimProgress += delta;
+        const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
+        remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, equipTargetRotation, t);
+        if (t >= 1) {
+            remotePlayer.userData.isEquipping = false;
+            remotePlayer.rightArm.rotation.x = equipTargetRotation;
+        }
+    }
+
+    // UNEQUIP animação
+    if (remotePlayer.userData.isUnequipping) {
+        remotePlayer.userData.equipAnimProgress += delta;
+        const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
+        remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, 0, t);
+        if (t >= 1) {
+            remotePlayer.userData.isUnequipping = false;
+            remotePlayer.rightArm.rotation.x = 0;
+
+            // remove modelo da mão
+            if (model.parent) model.parent.remove(model);
+            model.visible = false;
+        }
+    }
+}
+
 
     // Step physics world
     physicsWorld.step(fixedTimeStep, delta, 3);

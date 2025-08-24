@@ -61,25 +61,6 @@ io.on('connection', (socket) => {
             legs: '#80C91C'
         }
     };
-
-    io.on("connection", (socket) => {
-    socket.on("equipTool", (data) => {
-        socket.broadcast.emit("remoteEquip", { playerId: socket.id, tool: data.tool });
-    });
-
-    socket.on("unequipTool", (data) => {
-        socket.broadcast.emit("remoteUnequip", { playerId: socket.id, tool: data.tool });
-    });
-});
-
-socket.on('launchRocket', (data) => {
-        // retransmite para todos, exceto quem enviou
-        socket.broadcast.emit('spawnRocket', {
-            id: socket.id,
-            start: data.start,
-            dir: data.dir
-        });
-    });
     
     // Notify other players about new player
     socket.broadcast.emit('playerJoined', players[socket.id]);
@@ -131,6 +112,14 @@ socket.on('launchRocket', (data) => {
             players[socket.id].colors = colors;
             // The color change will be broadcast in the next game state update.
         }
+    });
+
+    socket.on("equipTool", (data) => {
+        socket.broadcast.emit("remoteEquip", { playerId: socket.id, tool: data.tool });
+    });
+
+    socket.on("unequipTool", (data) => {
+        socket.broadcast.emit("remoteUnequip", { playerId: socket.id, tool: data.tool });
     });
 
     // valida/repete animação para outros
