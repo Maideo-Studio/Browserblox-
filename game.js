@@ -1666,39 +1666,43 @@ function animate() {
     if (!model) continue;
 
     // EQUIP animação
-    if (isEquipping) {
-    equipAnimProgress += delta;
-    const t = Math.min(equipAnimProgress / equipAnimDuration, 1);
-    player.rightArm.rotation.x = THREE.MathUtils.lerp(
-        player.rightArm.rotation.x,
+    if (remotePlayer.userData.isEquipping) {
+    remotePlayer.userData.equipAnimProgress += delta;
+    const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
+    remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(
+        remotePlayer.rightArm.rotation.x,
         equipTargetRotation,
         t
     );
     if (t >= 1) {
-        player.rightArm.rotation.x = equipTargetRotation; // braço final reto
-        isEquipping = false;
+        remotePlayer.rightArm.rotation.x = equipTargetRotation; // braço final reto
+        remotePlayer.userData.isEquipping = false;
     }
-} else if (equippedTool === 'rocketLauncher') {
-    player.rightArm.rotation.x = equipTargetRotation; // sempre reto enquanto equipada
-} else {
-    player.rightArm.rotation.x = 0; // braço reto quando nada equipado
 }
 
+// UNEQUIP animação
+if (remotePlayer.userData.isUnequipping) {
+    remotePlayer.userData.equipAnimProgress += delta;
+    const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
+    remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(
+        remotePlayer.rightArm.rotation.x,
+        0,
+        t
+    );
+    if (t >= 1) {
+        remotePlayer.rightArm.rotation.x = 0; // braço reto após desequip
+        remotePlayer.userData.isUnequipping = false;
 
-    // UNEQUIP animação
-    if (remotePlayer.userData.isUnequipping) {
-        remotePlayer.userData.equipAnimProgress += delta;
-        const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
-        remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, 0, t);
-        if (t >= 1) {
-            remotePlayer.userData.isUnequipping = false;
-            remotePlayer.rightArm.rotation.x = 0;
-
-            // remove modelo da mão
-            if (model.parent) model.parent.remove(model);
-            model.visible = false;
-        }
+        // remove modelo da mão
+        if (model.parent) model.parent.remove(model);
+        model.visible = false;
     }
+}
+
+// Mantém braço reto se equipado
+if (!remotePlayer.userData.isEquipping && remotePlayer.userData.equippedTool === "rocketLauncher") {
+    remotePlayer.rightArm.rotation.x = equipTargetRotation;
+}
 }
 
 
