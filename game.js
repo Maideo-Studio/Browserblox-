@@ -1588,8 +1588,9 @@ function unequipTool() {
     scene.add(rocketLauncherModel);
     rocketLauncherModel.visible = false;
     isUnequipping = true;
+    unequipAnimProgress = 0; // inicializa
+    isEquipping = false;     // garante que equip não atrapalhe
     equippedTool = null;
-    player.rightArm.rotation.x = 0; // Reset arm
     document.getElementById('equip-tool-btn').classList.remove('equipped');
 }
 
@@ -1902,21 +1903,15 @@ function animate() {
     if (isUnequipping) {
     unequipAnimProgress += delta;
     const t = Math.min(unequipAnimProgress / equipAnimDuration, 1);
-    player.rightArm.rotation.x = THREE.MathUtils.lerp(
-        player.rightArm.rotation.x,
-        0, // volta para a posição normal do braço
-        t
-    );
+    player.rightArm.rotation.x = THREE.MathUtils.lerp(player.rightArm.rotation.x, 0, t);
+
     if (t >= 1) {
         player.rightArm.rotation.x = 0;
         isUnequipping = false;
 
         // remover modelo da mão
-        if (rocketLauncherModel.parent) {
-            rocketLauncherModel.parent.remove(rocketLauncherModel);
-        }
+        if (rocketLauncherModel.parent) rocketLauncherModel.parent.remove(rocketLauncherModel);
         rocketLauncherModel.visible = false;
-        equippedTool = null;
     }
 }
 }
