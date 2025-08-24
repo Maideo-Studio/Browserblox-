@@ -1588,6 +1588,10 @@ function unequipTool() {
     equippedTool = null;
     player.rightArm.rotation.x = 0; // Reset arm
 
+     isEquipping = true;          // usamos a mesma flag, mas sentido reverso
+    equipAnimProgress = 0;
+    equippedTool = null;
+
     if (socket && socket.connected) {
         socket.emit("unequipTool", { tool: "rocketLauncher" });
     }
@@ -1669,33 +1673,25 @@ function animate() {
     if (remotePlayer.userData.isEquipping) {
     remotePlayer.userData.equipAnimProgress += delta;
     const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
-    remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(
-        remotePlayer.rightArm.rotation.x,
-        equipTargetRotation,
-        t
-    );
-    if (t >= 1) {
-        remotePlayer.rightArm.rotation.x = equipTargetRotation; // braço final reto
-        remotePlayer.userData.isEquipping = false;
-    }
-}
 
-// UNEQUIP animação
-if (remotePlayer.userData.isUnequipping) {
-    remotePlayer.userData.equipAnimProgress += delta;
-    const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
-    remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(
-        remotePlayer.rightArm.rotation.x,
-        0,
-        t
-    );
-    if (t >= 1) {
-        remotePlayer.rightArm.rotation.x = 0; // braço reto após desequip
-        remotePlayer.userData.isUnequipping = false;
-
-        // remove modelo da mão
-        if (model.parent) model.parent.remove(model);
-        model.visible = false;
+    if (remotePlayer.userData.equippedTool === "rocketLauncher") {
+        remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, equipTargetRotation, t);
+        if (t >= 1) {
+            remotePlayer.rightArm.rotation.x = equipTargetRotation;
+            remotePlayer.userData.isEquipping = false;
+        }
+    } else {
+        // animação de desequip
+        remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, 0, t);
+        if (t >= 1) {
+            remotePlayer.rightArm.rotation.x = 0;
+            remotePlayer.userData.isEquipping = false;
+            // remove arma da mão
+            if (remotePlayer.userData.rocketLauncherModel.parent) {
+                remotePlayer.rightArm.remove(remotePlayer.userData.rocketLauncherModel);
+                remotePlayer.userData.rocketLauncherModel.visible = false;
+            }
+        }
     }
 }
 
