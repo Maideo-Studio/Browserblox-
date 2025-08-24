@@ -1888,20 +1888,30 @@ function animate() {
 
     // --- Equip animation for rocket launcher ---
     if (isEquipping) {
-        equipAnimProgress += delta;
-        const t = Math.min(equipAnimProgress / equipAnimDuration, 1);
-        player.rightArm.rotation.x = THREE.MathUtils.lerp(
-            player.rightArm.rotation.x,
-            equipTargetRotation,
-            t
-        );
-        if (t >= 1) {
-            player.rightArm.rotation.x = equipTargetRotation;
-            isEquipping = false;
-        }
-    } else if (equippedTool === 'rocketLauncher') {
+    equipAnimProgress += delta;
+    const t = Math.min(equipAnimProgress / equipAnimDuration, 1);
+    player.rightArm.rotation.x = THREE.MathUtils.lerp(player.rightArm.rotation.x, equipTargetRotation, t);
+    if (t >= 1) {
         player.rightArm.rotation.x = equipTargetRotation;
+        isEquipping = false; // animação completa
     }
+}
+
+// --- Desequipar ---
+if (isUnequipping) {
+    equipAnimProgress += delta;
+    const t = Math.min(equipAnimProgress / equipAnimDuration, 1);
+    player.rightArm.rotation.x = THREE.MathUtils.lerp(player.rightArm.rotation.x, 0, t);
+    if (t >= 1) {
+        player.rightArm.rotation.x = 0;
+        isUnequipping = false;
+
+        // remove modelo da mão
+        if (rocketLauncherModel.parent) player.rightArm.remove(rocketLauncherModel);
+        scene.add(rocketLauncherModel);
+        rocketLauncherModel.visible = false;
+    }
+}
 }
 
 // Chat message handling
