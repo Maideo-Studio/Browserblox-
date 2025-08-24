@@ -593,14 +593,6 @@ function initSocket() {
         }
     });
 
-    socket.on('spawnRocket', (data) => {
-    const start = new THREE.Vector3(data.start.x, data.start.y, data.start.z);
-    const dir = new THREE.Vector3(data.dir.x, data.dir.y, data.dir.z).normalize();
-
-    createRocket(start, dir);
-});
-
-
     socket.on('dance', (dancerId) => {
         if (dancerId && otherPlayers[dancerId]) {
             otherPlayers[dancerId].isDancing = true;
@@ -1473,6 +1465,13 @@ function launchRocket() {
             dir: { x: direction.x, y: direction.y, z: direction.z }
         });
     }
+
+    socket.on('spawnRocket', (data) => {
+    const start = new THREE.Vector3(data.start.x, data.start.y, data.start.z);
+    const dir = new THREE.Vector3(data.dir.x, data.dir.y, data.dir.z).normalize();
+
+    createRocket(start, dir);
+});
 
     function createRocket(startPos, direction) {
     const rocketGeometry = new THREE.BoxGeometry(1, 1, 1);
