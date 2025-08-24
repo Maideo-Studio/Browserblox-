@@ -1657,8 +1657,7 @@ function animate() {
         }
     }
 
-    // Equip animation
-if (remotePlayer.userData.isEquipping) {
+    if (remotePlayer.userData.isEquipping) {
     remotePlayer.userData.equipAnimProgress += delta;
     const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
     remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(
@@ -1691,6 +1690,7 @@ if (remotePlayer.userData.isUnequipping) {
         remotePlayer.userData.rocketLauncherModel.visible = false;
         remotePlayer.userData.equippedTool = null;
     }
+}
 }
 
 
