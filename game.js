@@ -1587,14 +1587,6 @@ function unequipTool() {
     rocketLauncherModel.visible = false;
     equippedTool = null;
     player.rightArm.rotation.x = 0; // Reset arm
-
-     isEquipping = true;          // usamos a mesma flag, mas sentido reverso
-    equipAnimProgress = 0;
-    equippedTool = null;
-
-    if (socket && socket.connected) {
-        socket.emit("unequipTool", { tool: "rocketLauncher" });
-    }
     document.getElementById('equip-tool-btn').classList.remove('equipped');
 }
 
@@ -1671,34 +1663,31 @@ function animate() {
 
     // EQUIP animação
     if (remotePlayer.userData.isEquipping) {
-    remotePlayer.userData.equipAnimProgress += delta;
-    const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
-
-    if (remotePlayer.userData.equippedTool === "rocketLauncher") {
+        remotePlayer.userData.equipAnimProgress += delta;
+        const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
         remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, equipTargetRotation, t);
         if (t >= 1) {
+            remotePlayer.userData.isEquipping = false;
             remotePlayer.rightArm.rotation.x = equipTargetRotation;
-            remotePlayer.userData.isEquipping = false;
-        }
-    } else {
-        // animação de desequip
-        remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, 0, t);
-        if (t >= 1) {
-            remotePlayer.rightArm.rotation.x = 0;
-            remotePlayer.userData.isEquipping = false;
-            // remove arma da mão
-            if (remotePlayer.userData.rocketLauncherModel.parent) {
-                remotePlayer.rightArm.remove(remotePlayer.userData.rocketLauncherModel);
-                remotePlayer.userData.rocketLauncherModel.visible = false;
-            }
         }
     }
-}
 
-// Mantém braço reto se equipado
-if (!remotePlayer.userData.isEquipping && remotePlayer.userData.equippedTool === "rocketLauncher") {
-    remotePlayer.rightArm.rotation.x = equipTargetRotation;
-}
+    // UNEQUIP animação
+    if (remotePlayer.userData.isUnequipping) {
+    remotePlayer.userData.equipAnimProgress += delta;
+    const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
+    remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, 0, t);
+    if (t >= 1) {
+        remotePlayer.rightArm.rotation.x = 0;
+        remotePlayer.userData.isUnequipping = false;
+
+        // remove arma da mão
+        if (remotePlayer.userData.rocketLauncherModel.parent) {
+            remotePlayer.rightArm.remove(remotePlayer.userData.rocketLauncherModel);
+            remotePlayer.userData.rocketLauncherModel.visible = false;
+        }
+    }
+ }
 }
 
 
