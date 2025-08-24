@@ -1437,8 +1437,6 @@ let equippedTool = null;
 let rocketLauncherModel = null;
 let isEquipping = false;
 let equipAnimProgress = 0;
-let isUnequipping = false;
-let unequipAnimProgress = 0;
 const equipAnimDuration = 0.25; // seconds
 let equipTargetRotation = -Math.PI / 2;
 
@@ -1583,12 +1581,11 @@ function createExplosion(position) {
 
 // Unequip function
 function unequipTool() {
-    if (!rocketLauncherModel || equippedTool !== 'rocketLauncher' || isUnequipping) return;
+    if (!rocketLauncherModel || equippedTool !== 'rocketLauncher') return;
     player.rightArm.remove(rocketLauncherModel);
     scene.add(rocketLauncherModel);
     rocketLauncherModel.visible = false;
     equippedTool = null;
-    isUnequipping = true;
     player.rightArm.rotation.x = 0; // Reset arm
     document.getElementById('equip-tool-btn').classList.remove('equipped');
 }
@@ -1669,15 +1666,11 @@ function animate() {
         remotePlayer.userData.equipAnimProgress += delta;
         const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
         remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, equipTargetRotation, t);
-        if (t >= 1) {
-            remotePlayer.userData.isEquipping = false;
-            remotePlayer.rightArm.rotation.x = equipTargetRotation;
-        }
     }
 
     // UNEQUIP animação
     if (remotePlayer.userData.isUnequipping) {
-        remotePlayer.userData.unequipAnimProgress += delta;
+        remotePlayer.userData.equipAnimProgress += delta;
         const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
         remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, 0, t);
         if (t >= 1) {
