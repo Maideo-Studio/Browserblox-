@@ -1582,7 +1582,7 @@ function createExplosion(position) {
 
 // Unequip function
 function unequipTool() {
-    if (!rocketLauncherModel || equippedTool !== 'rocketLauncher') return;
+    if (!rocketLauncherModel || isUnequipping || isEquipping || equippedTool !== 'rocketLauncher') return;
     player.rightArm.remove(rocketLauncherModel);
     scene.add(rocketLauncherModel);
     rocketLauncherModel.visible = false;
@@ -1664,32 +1664,30 @@ function animate() {
     if (!model) continue;
 
     // EQUIP animação
-    if (remotePlayer.userData.isEquipping) {
-        remotePlayer.userData.equipAnimProgress += delta;
-        const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
-        remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, equipTargetRotation, t);
-        if (t >= 1) {
-            remotePlayer.userData.isEquipping = false;
-            remotePlayer.rightArm.rotation.x = equipTargetRotation;
-        }
-    }
-
-    // UNEQUIP animação
-    if (remotePlayer.userData.isUnequipping) {
-    remotePlayer.userData.equipAnimProgress += delta;
-    const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
-    remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, 0, t);
+    if (isEquipping) {
+    equipAnimProgress += delta;
+    const t = Math.min(equipAnimProgress / equipAnimDuration, 1);
+    player.rightArm.rotation.x = THREE.MathUtils.lerp(player.rightArm.rotation.x, equipTargetRotation, t);
     if (t >= 1) {
-        remotePlayer.rightArm.rotation.x = 0;
-        remotePlayer.userData.isUnequipping = false;
-
-        // remove arma da mão
-        if (remotePlayer.userData.rocketLauncherModel.parent) {
-            remotePlayer.rightArm.remove(remotePlayer.userData.rocketLauncherModel);
-            remotePlayer.userData.rocketLauncherModel.visible = false;
-        }
+        player.rightArm.rotation.x = equipTargetRotation;
+        isEquipping = false;
     }
- }
+}
+
+// Unequip animation
+if (isUnequipping) {
+    equipAnimProgress += delta;
+    const t = Math.min(equipAnimProgress / equipAnimDuration, 1);
+    player.rightArm.rotation.x = THREE.MathUtils.lerp(player.rightArm.rotation.x, 0, t);
+    if (t >= 1) {
+        player.rightArm.rotation.x = 0;
+        isUnequipping = false;
+
+        if (rocketLauncherModel.parent) player.rightArm.remove(rocketLauncherModel);
+        scene.add(rocketLauncherModel);
+        rocketLauncherModel.visible = false;
+    }
+}
 }
 
 
@@ -1888,30 +1886,20 @@ function animate() {
 
     // --- Equip animation for rocket launcher ---
     if (isEquipping) {
-    equipAnimProgress += delta;
-    const t = Math.min(equipAnimProgress / equipAnimDuration, 1);
-    player.rightArm.rotation.x = THREE.MathUtils.lerp(player.rightArm.rotation.x, equipTargetRotation, t);
-    if (t >= 1) {
+        equipAnimProgress += delta;
+        const t = Math.min(equipAnimProgress / equipAnimDuration, 1);
+        player.rightArm.rotation.x = THREE.MathUtils.lerp(
+            player.rightArm.rotation.x,
+            equipTargetRotation,
+            t
+        );
+        if (t >= 1) {
+            player.rightArm.rotation.x = equipTargetRotation;
+            isEquipping = false;
+        }
+    } else if (equippedTool === 'rocketLauncher') {
         player.rightArm.rotation.x = equipTargetRotation;
-        isEquipping = false; // animação completa
     }
-}
-
-// --- Desequipar ---
-if (isUnequipping) {
-    equipAnimProgress += delta;
-    const t = Math.min(equipAnimProgress / equipAnimDuration, 1);
-    player.rightArm.rotation.x = THREE.MathUtils.lerp(player.rightArm.rotation.x, 0, t);
-    if (t >= 1) {
-        player.rightArm.rotation.x = 0;
-        isUnequipping = false;
-
-        // remove modelo da mão
-        if (rocketLauncherModel.parent) player.rightArm.remove(rocketLauncherModel);
-        scene.add(rocketLauncherModel);
-        rocketLauncherModel.visible = false;
-    }
-}
 }
 
 // Chat message handling
