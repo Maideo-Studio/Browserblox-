@@ -1436,6 +1436,7 @@ function stopDance() {
 let equippedTool = null;
 let rocketLauncherModel = null;
 let isEquipping = false;
+let isUnequipping = false;
 let equipAnimProgress = 0;
 const equipAnimDuration = 0.25; // seconds
 let equipTargetRotation = -Math.PI / 2;
@@ -1586,6 +1587,7 @@ function unequipTool() {
     scene.add(rocketLauncherModel);
     rocketLauncherModel.visible = false;
     equippedTool = null;
+    isUnequipping = true;
     player.rightArm.rotation.x = 0; // Reset arm
     document.getElementById('equip-tool-btn').classList.remove('equipped');
 }
