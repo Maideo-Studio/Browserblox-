@@ -1666,15 +1666,24 @@ function animate() {
     if (!model) continue;
 
     // EQUIP animação
-    if (remotePlayer.userData.isEquipping) {
-        remotePlayer.userData.equipAnimProgress += delta;
-        const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
-        remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, equipTargetRotation, t);
-        if (t >= 1) {
-            remotePlayer.userData.isEquipping = false;
-            remotePlayer.rightArm.rotation.x = equipTargetRotation;
-        }
+    if (isEquipping) {
+    equipAnimProgress += delta;
+    const t = Math.min(equipAnimProgress / equipAnimDuration, 1);
+    player.rightArm.rotation.x = THREE.MathUtils.lerp(
+        player.rightArm.rotation.x,
+        equipTargetRotation,
+        t
+    );
+    if (t >= 1) {
+        player.rightArm.rotation.x = equipTargetRotation; // braço final reto
+        isEquipping = false;
     }
+} else if (equippedTool === 'rocketLauncher') {
+    player.rightArm.rotation.x = equipTargetRotation; // sempre reto enquanto equipada
+} else {
+    player.rightArm.rotation.x = 0; // braço reto quando nada equipado
+}
+
 
     // UNEQUIP animação
     if (remotePlayer.userData.isUnequipping) {
