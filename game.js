@@ -1884,33 +1884,40 @@ function animate() {
 
     // --- Equip animation for rocket launcher ---
     if (isEquipping) {
-    equipAnimProgress += delta;
-    const t = Math.min(equipAnimProgress / equipAnimDuration, 1);
-    player.rightArm.rotation.x = THREE.MathUtils.lerp(
-        player.rightArm.rotation.x,
-        equipTargetRotation,
-        t
-    );
-    if (t >= 1) {
+        equipAnimProgress += delta;
+        const t = Math.min(equipAnimProgress / equipAnimDuration, 1);
+        player.rightArm.rotation.x = THREE.MathUtils.lerp(
+            player.rightArm.rotation.x,
+            equipTargetRotation,
+            t
+        );
+        if (t >= 1) {
+            player.rightArm.rotation.x = equipTargetRotation;
+            isEquipping = false;
+        }
+    } else if (equippedTool === 'rocketLauncher') {
         player.rightArm.rotation.x = equipTargetRotation;
-        isEquipping = false;
     }
-} else if (isUnequipping) {
+
+    if (isUnequipping) {
     unequipAnimProgress += delta;
     const t = Math.min(unequipAnimProgress / equipAnimDuration, 1);
     player.rightArm.rotation.x = THREE.MathUtils.lerp(
         player.rightArm.rotation.x,
-        0,
+        0, // volta para a posição normal do braço
         t
     );
     if (t >= 1) {
         player.rightArm.rotation.x = 0;
         isUnequipping = false;
+
+        // remover modelo da mão
+        if (rocketLauncherModel.parent) {
+            rocketLauncherModel.parent.remove(rocketLauncherModel);
+        }
+        rocketLauncherModel.visible = false;
+        equippedTool = null;
     }
-} else if (equippedTool === 'rocketLauncher') {
-    player.rightArm.rotation.x = equipTargetRotation;
-} else {
-    player.rightArm.rotation.x = 0; // quando não tem nada equipado
 }
 }
 
