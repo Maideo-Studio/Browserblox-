@@ -94,8 +94,7 @@ function sendChatMessage() {
     }
 }
 
-function showNameTag(playerId, nickname) {
-    let targetPlayer = playerId === playerId ? player : otherPlayers[playerId];
+function showNameTag(targetPlayer, nickname) {
     if (!targetPlayer) return;
 
     // Tenta achar a cabeça
@@ -139,6 +138,7 @@ function showNameTag(playerId, nickname) {
     // Salva no objeto do jogador pra poder remover depois
     targetPlayer.userData.nameTag = { element: nameDiv, updater: interval };
 }
+
 
 
 // Listen for chat messages from server
