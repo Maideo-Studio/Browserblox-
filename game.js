@@ -3,6 +3,7 @@ import { PointerLockControls } from 'three/addons/controls/PointerLockControls.j
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as CANNON from 'cannon-es';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
 let scene, camera, renderer, controls;
 let player, velocity, direction;
@@ -56,16 +57,6 @@ let playerId;
 let lastSentTime = 0;
 const sendInterval = 100; // ms, so 10 times per second
 
-let clientNickname = localStorage.getItem('nickname') || null;
-function pickLocalNickname() {
-    // If user previously saved nickname use it; otherwise default to rogold_currentUser
-    if (!clientNickname) {
-        clientNickname = 'rogold_currentUser';
-        // don't overwrite localStorage unless user explicitly sets in UI (we keep it ephemeral here)
-    }
-    return clientNickname;
-}
-
 function playClickSound() {
     if (clickSound && clickSound.buffer) {
         if (clickSound.isPlaying) {
@@ -80,45 +71,6 @@ function areMobileControlsActive() {
     if (controlOverride === 'pc') return false;
     // 'auto' mode
     return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (navigator.msMaxTouchPoints > 0);
-}
-
-// Add helper to create/update a name sprite (canvas texture used on a THREE.Sprite)
-function createNameSprite(text = 'Guest') {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const w = 256, h = 64;
-    canvas.width = w;
-    canvas.height = h;
-    // draw background (transparent) and crisp text
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = '#000';
-    ctx.font = 'bold 28px "Noto Sans", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, w/2, h/2);
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.minFilter = THREE.NearestFilter;
-    texture.magFilter = THREE.NearestFilter;
-    const material = new THREE.SpriteMaterial({ map: texture, sizeAttenuation: false });
-    const sprite = new THREE.Sprite(material);
-    sprite.scale.set(2.5, 0.65, 1);
-    return { sprite, texture, canvas, ctx };
-}
-function setNameSpriteText(nameObj, text) {
-    if (!nameObj) return;
-    const { canvas, ctx, texture } = nameObj;
-    const w = canvas.width, h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = '#000';
-    ctx.font = 'bold 28px "Noto Sans", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, w/2, h/2);
-    texture.needsUpdate = true;
 }
 
 function sendChatMessage() {
@@ -249,6 +201,8 @@ function showBubbleChat(chatPlayerId, message) {
 function createPlayer(headModel) {
     const playerGroup = new THREE.Group();
     playerGroup.name = "Player";
+
+    addNameTagToPlayer(playerGroup, nickname); // para você
 
     // Materials - Classic Roblox "noob" colors
     const torsoMaterial = new THREE.MeshLambertMaterial({ color: 0x00A2FF }); // Blue
@@ -391,12 +345,6 @@ function createPlayer(headModel) {
     // We will offset the whole group so its bottom is at y=0.
     playerGroup.position.y = 3;
 
-    const nameObj = createNameSprite('You');
-    nameObj.sprite.position.set(0, 5.2, 0); // above the head
-    playerGroup.add(nameObj.sprite);
-    playerGroup.userData.nameTag = nameObj;
-    playerGroup.userData.nickname = null; // will be set later
-
     return playerGroup;
 }
 
@@ -435,19 +383,10 @@ function createRemotePlayer(headModel, playerData) {
     playerGroup.rotation.y = playerData.rotation;
     playerGroup.userData.targetPosition = new THREE.Vector3(playerData.x, playerData.y, playerData.z);
     playerGroup.userData.targetQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, playerData.rotation, 0));
-        playerGroup.userData.playerId = playerData.id;
-    playerGroup.userData.nickname = playerData.nickname || null;
-    const displayName = playerData.nickname || ('Guest');
-    if (playerGroup.userData.nameTag) {
-        setNameSpriteText(playerGroup.userData.nameTag, displayName);
-    } else {
-        const nameObj = createNameSprite(displayName);
-        nameObj.sprite.position.set(0, 5.2, 0);
-        playerGroup.add(nameObj.sprite);
-        playerGroup.userData.nameTag = nameObj;
-    }
     updatePlayerColors(playerGroup, playerData.colors);
     if (playerData.hatId) addHatToPlayer(playerGroup, playerData.hatId);
+
+    addNameTagToPlayer(playerGroup, playerData.nickname); // para outros players
 
     // Salve o nickname para uso na lista
     playerGroup.userData.nickname = playerData.nickname || "Guest";
@@ -544,15 +483,10 @@ function initSocket() {
                     remotePlayer.userData.playerId = playerData.id;
                     otherPlayers[playerData.id] = remotePlayer;
                     scene.add(remotePlayer);
-                                        const displayName2 = playerData.nickname || 'Guest';
-                    if (remotePlayer.userData.nameTag) {
-                        setNameSpriteText(remotePlayer.userData.nameTag, displayName2);
-                    }
                 });
             }
         });
         statusEl.textContent = `Online (${Object.keys(serverPlayers).length} players)`;
-        renderPlayerList(serverPlayers);
     });
     
     socket.on('playerJoined', (playerData) => {
@@ -851,6 +785,12 @@ function initGame() {
         1000
     );
     camera.position.y = 10;
+
+    const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(window.innerWidth, window.innerHeight);
+labelRenderer.domElement.style.position = 'absolute';
+labelRenderer.domElement.style.top = '0px';
+document.body.appendChild(labelRenderer.domElement);
 
     renderer = new THREE.WebGLRenderer({
         canvas: document.getElementById('game-canvas'),
@@ -1622,6 +1562,23 @@ function startDance() {
     playDanceSoundAt(player);
 }
 
+function addNameTagToPlayer(playerGroup, nickname) {
+    const div = document.createElement('div');
+    div.className = 'nameTag';
+    div.textContent = nickname;
+    div.style.fontSize = '14px';
+    div.style.color = 'white';
+    div.style.fontFamily = 'Comic Sans MS, Arial, sans-serif';
+    div.style.textShadow = '1px 1px 2px black';
+    
+    const label = new CSS2DObject(div);
+    label.position.set(0, 3.5, 0); // altura acima da cabeça
+    playerGroup.add(label);
+    
+    return label;
+}
+
+
 function stopDance() {
     if (!isDancing) return;
     isDancing = false;
@@ -1809,6 +1766,10 @@ function animate() {
     const time = performance.now();
     const delta = (time - prevTime) / 1000;
     const fixedTimeStep = 1 / 60; // 60 FPS
+
+    renderer.render(scene, camera);
+labelRenderer.render(scene, camera);
+
 
     for (let i = explodingParticles.length - 1; i >= 0; i--) {
     const particle = explodingParticles[i];
