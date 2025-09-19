@@ -97,15 +97,6 @@ function sendChatMessage() {
 function showNameTag(targetPlayer, nickname) {
     if (!targetPlayer) return;
 
-    // Tenta achar a cabeça
-    let headMesh = null;
-    targetPlayer.traverse(child => {
-        if (child.isMesh && child.name === "Head") {
-            headMesh = child;
-        }
-    });
-    const target = headMesh || targetPlayer;
-
     // Cria o elemento HTML
     const nameDiv = document.createElement('div');
     nameDiv.className = 'nameTag';
@@ -122,8 +113,8 @@ function showNameTag(targetPlayer, nickname) {
     // Atualiza posição na tela
     function updatePosition() {
         let worldPos = new THREE.Vector3();
-        target.getWorldPosition(worldPos);
-        worldPos.y += 2.8; // altura acima da cabeça
+        targetPlayer.getWorldPosition(worldPos);  // pega posição do player
+        worldPos.y += 3; // altura acima do player (ajuste se ficar torto)
 
         let screenPos = worldPos.clone().project(camera);
         let x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
@@ -138,6 +129,7 @@ function showNameTag(targetPlayer, nickname) {
     // Salva no objeto do jogador pra poder remover depois
     targetPlayer.userData.nameTag = { element: nameDiv, updater: interval };
 }
+
 
 
 
