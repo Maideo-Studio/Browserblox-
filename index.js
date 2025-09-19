@@ -2176,39 +2176,84 @@ function hideCreateBlogForm() {
     setActiveNavLink('community-link'); 
 }
 
-const clothes = {
-    "classic": { shirt: "shirts/classic.png", pants: "pants/classic.png" },
-    "red":     { shirt: "shirts/red.png", pants: "pants/red.png" },
-    "blue":    { shirt: "shirts/blue.png", pants: "pants/blue.png" }
+// ---- Clothes catalog (paths: crie estas imagens nas pastas shirts/ e pants/) ----
+const clothesCatalog = {
+  classic: { shirt: 'shirts/classic_shirt.png', pants: 'pants/classic_pants.png' },
+  red:     { shirt: 'shirts/red_shirt.png',     pants: 'pants/red_pants.png' },
+  blue:    { shirt: 'shirts/blue_shirt.png',    pants: 'pants/blue_pants.png' }
 };
 
-function openClothesMenu() {
-    const container = document.createElement("div");
-    container.className = "clothes-customizer";
-    container.innerHTML = `
-        <h3>Customize Clothes</h3>
-        ${Object.keys(clothes).map(c => `
-            <div class="clothes-option" data-id="${c}">
-                ${c.toUpperCase()}
-            </div>
-        `).join("")}
-    `;
-    document.body.appendChild(container);
+// cria botão e menu
+function setupClothesUI() {
+  const container = document.querySelector('.game-ui');
+  if (!container) return;
 
-    container.querySelectorAll(".clothes-option").forEach(opt => {
-        opt.addEventListener("click", () => {
-            const id = opt.dataset.id;
-            localStorage.setItem("rogold_equipped_clothes", id);
+  // botão
+  const btn = document.createElement('button');
+  btn.id = 'clothes-btn';
+  btn.textContent = 'Clothes';
+  btn.className = 'retro-btn';
+  container.appendChild(btn);
 
-            // avisa o servidor
-            if (socket) {
-                socket.emit("playerCustomize", {
-                    clothes: clothes[id]
-                });
-            }
-        });
+  // menu (toggle)
+  btn.addEventListener('click', () => {
+    const existing = document.getElementById('clothes-menu');
+    if (existing) { existing.remove(); return; }
+
+    const menu = document.createElement('div');
+    menu.id = 'clothes-menu';
+    menu.className = 'color-customizer';
+    menu.style.zIndex = 120;
+    menu.innerHTML = `<h3>Roupas</h3>`;
+    Object.keys(clothesCatalog).forEach(id => {
+      const opt = document.createElement('div');
+      opt.className = 'potion-option';
+      opt.dataset.id = id;
+      opt.textContent = id.toUpperCase();
+      opt.style.cursor = 'pointer';
+      opt.addEventListener('click', () => {
+        // salva local e notifica outros sistemas
+        localStorage.setItem('rogold_equipped_clothes', id);
+        window.dispatchEvent(new Event('rogold_equipped_clothes_changed'));
+
+        // envia para o servidor (se conectado)
+        if (window.socket && window.socket.connected) {
+          window.socket.emit('playerCustomize', { clothesId: id });
+        }
+      });
+      menu.appendChild(opt);
     });
+
+    // botão de remover roupa
+    const remove = document.createElement('div');
+    remove.className = 'potion-option';
+    remove.textContent = 'REMOVER';
+    remove.addEventListener('click', () => {
+      localStorage.removeItem('rogold_equipped_clothes');
+      window.dispatchEvent(new Event('rogold_equipped_clothes_changed'));
+      if (window.socket && window.socket.connected) {
+        window.socket.emit('playerCustomize', { clothesId: null });
+      }
+    });
+    menu.appendChild(remove);
+
+    container.appendChild(menu);
+  });
 }
+
+// chama no carregamento
+window.addEventListener('DOMContentLoaded', () => {
+  setupClothesUI();
+  // se já tiver roupa salva, notifica para aplicar localmente
+  if (localStorage.getItem('rogold_equipped_clothes')) {
+    window.dispatchEvent(new Event('rogold_equipped_clothes_changed'));
+    // também tenta enviar ao servidor caso já conectado
+    if (window.socket && window.socket.connected) {
+      window.socket.emit('playerCustomize', { clothesId: localStorage.getItem('rogold_equipped_clothes') });
+    }
+  }
+});
+
 
 // Re-defining these for clarity in global scope if called from HTML inline
 window.openLoginModal = openLoginModal;
@@ -2230,12 +2275,6 @@ window.openBlog = openBlog;
 window.sendFriendRequest = sendFriendRequest; 
 window.acceptFriendRequest = acceptFriendRequest; 
 window.declineFriendRequest = declineFriendRequest;
-
-const clothesBtn = document.createElement("button");
-clothesBtn.textContent = "Clothes";
-clothesBtn.className = "retro-btn";
-clothesBtn.onclick = openClothesMenu;
-document.querySelector(".stylefront-ui").appendChild(clothesBtn);
 
 
 // Coin Reward Timer Logic
