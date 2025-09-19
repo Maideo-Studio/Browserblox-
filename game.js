@@ -94,45 +94,6 @@ function sendChatMessage() {
     }
 }
 
-function showNameTag(targetPlayer, nickname) {
-    if (!targetPlayer) return;
-
-    // Cria o elemento HTML
-    const nameDiv = document.createElement('div');
-    nameDiv.className = 'nameTag';
-    nameDiv.textContent = nickname;
-    nameDiv.style.position = 'absolute';
-    nameDiv.style.color = 'white';
-    nameDiv.style.fontSize = '14px';
-    nameDiv.style.fontFamily = 'Comic Sans MS, Arial, sans-serif';
-    nameDiv.style.textShadow = '1px 1px 2px black';
-    nameDiv.style.fontWeight = 'bold';
-    nameDiv.style.pointerEvents = 'none';
-    document.body.appendChild(nameDiv);
-
-    // Atualiza posição na tela
-    function updatePosition() {
-        let worldPos = new THREE.Vector3();
-        targetPlayer.getWorldPosition(worldPos);  // pega posição do player
-        worldPos.y += 3; // altura acima do player (ajuste se ficar torto)
-
-        let screenPos = worldPos.clone().project(camera);
-        let x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
-        let y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
-
-        nameDiv.style.left = `${x - nameDiv.offsetWidth / 2}px`;
-        nameDiv.style.top = `${y - nameDiv.offsetHeight}px`;
-    }
-
-    let interval = setInterval(updatePosition, 16);
-
-    // Salva no objeto do jogador pra poder remover depois
-    targetPlayer.userData.nameTag = { element: nameDiv, updater: interval };
-}
-
-
-
-
 // Listen for chat messages from server
 // Ensure this runs after DOM is loaded
 window.addEventListener('DOMContentLoaded', () => {
@@ -243,8 +204,6 @@ function createPlayer(headModel) {
     // Materials - Classic Roblox "noob" colors
     const torsoMaterial = new THREE.MeshLambertMaterial({ color: 0x00A2FF }); // Blue
     const legMaterial = new THREE.MeshLambertMaterial({ color: 0x80C91C }); // Green
-
-    showNameTag(playerId, nickname);
 
     // Arm Materials - with stud texture on top and bottom
     const textureLoader = new THREE.TextureLoader();
@@ -423,8 +382,6 @@ function createRemotePlayer(headModel, playerData) {
     playerGroup.userData.targetQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, playerData.rotation, 0));
     updatePlayerColors(playerGroup, playerData.colors);
     if (playerData.hatId) addHatToPlayer(playerGroup, playerData.hatId);
-
-    showNameTag(playerData.id, playerData.nickname);
 
     // Salve o nickname para uso na lista
     playerGroup.userData.nickname = playerData.nickname || "Guest";
@@ -649,17 +606,13 @@ function initSocket() {
         // This is now handled by 'gameState'
     });
     
-    socket.on('playerLeft', (id) => {
-    if (otherPlayers[id]) {
-        if (otherPlayers[id].userData.nameTag) {
-            clearInterval(otherPlayers[id].userData.nameTag.updater);
-            otherPlayers[id].userData.nameTag.element.remove();
+    socket.on('playerLeft', (playerId) => {
+        if (otherPlayers[playerId]) {
+            scene.remove(otherPlayers[playerId]);
+            delete otherPlayers[playerId];
+            // Update player count is now handled by gameState
         }
-        scene.remove(otherPlayers[id]);
-        delete otherPlayers[id];
-    }
-});
-
+    });
 
     socket.on('dance', (dancerId) => {
         if (dancerId && otherPlayers[dancerId]) {
