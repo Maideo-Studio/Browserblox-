@@ -195,6 +195,42 @@ function showBubbleChat(chatPlayerId, message) {
     }, 3000);
 }
 
+function createNicknameLabel(player, nickname) {
+    const label = document.createElement('div');
+    label.className = 'nickname-label';
+    label.textContent = nickname;
+    label.style.position = 'absolute';
+    label.style.color = 'white';
+    label.style.fontSize = '14px';
+    label.style.fontWeight = 'bold';
+    label.style.textShadow = '1px 1px 0px black';
+    label.style.pointerEvents = 'none';
+    label.style.zIndex = 100;
+    document.body.appendChild(label);
+    player.userData.nicknameLabel = label;
+}
+
+function updateNicknamePositions() {
+    Object.values(otherPlayers).forEach(p => {
+        if (!p.userData.nicknameLabel) return;
+        let headMesh = null;
+        p.traverse(child => {
+            if (child.isMesh && child.name === "Head") {
+                headMesh = child;
+            }
+        });
+        const target = headMesh || p;
+        let worldPos = new THREE.Vector3();
+        target.getWorldPosition(worldPos);
+        worldPos.y += 2.0; // Above head
+        let screenPos = worldPos.clone().project(camera);
+        let x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+        let y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
+        p.userData.nicknameLabel.style.left = `${x - p.userData.nicknameLabel.offsetWidth / 2}px`;
+        p.userData.nicknameLabel.style.top = `${y - p.userData.nicknameLabel.offsetHeight - 5}px`;
+    });
+}
+
 function createPlayer(headModel) {
 
     const playerGroup = new THREE.Group();
@@ -408,6 +444,7 @@ function ensureRemotePlayer(playerData) {
         remotePlayer.userData.playerId = playerData.id;
         otherPlayers[playerData.id] = remotePlayer;
         scene.add(remotePlayer);
+        createNicknameLabel(remotePlayer, playerData.nickname);
 
         // Apply any pending hat update, falling back to initial hat from snapshot
         const hatId = pendingHats[playerData.id] ?? playerData.hatId;
@@ -556,6 +593,9 @@ function initSocket() {
         // Remove players who have disconnected
         Object.keys(otherPlayers).forEach(id => {
             if (!serverPlayers[id]) {
+                if (otherPlayers[id].userData.nicknameLabel) {
+                    otherPlayers[id].userData.nicknameLabel.remove();
+                }
                 scene.remove(otherPlayers[id]);
                 delete otherPlayers[id];
             }
@@ -632,6 +672,9 @@ function initSocket() {
     
     socket.on('playerLeft', (playerId) => {
         if (otherPlayers[playerId]) {
+            if (otherPlayers[playerId].userData.nicknameLabel) {
+                otherPlayers[playerId].userData.nicknameLabel.remove();
+            }
             scene.remove(otherPlayers[playerId]);
             delete otherPlayers[playerId];
             // Update player count is now handled by gameState
@@ -2051,6 +2094,8 @@ if (remotePlayer.userData.isEquipped) {
     controls.target.y += 1; // Look slightly above player's base
 
     controls.update();
+
+    updateNicknamePositions();
 
     prevTime = performance.now();
 
