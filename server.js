@@ -149,7 +149,7 @@ io.on('connection', (socket) => {
     socket.roomName = roomName;
 
     // REGISTRO DE NICKNAME ÚNICO
-    socket.on('register', ({ nickname }) => {
+    socket.on('register', ({ nickname, faceId }) => {
         // Bloqueia nick duplicado
         if (Object.values(activeNicknames).includes(nickname)) {
             socket.emit('nicknameError', 'A sua conta já está sendo usada neste mesmo momento por favor saia do jogo e troque a conta');
@@ -168,13 +168,15 @@ io.on('connection', (socket) => {
             x: 0, y: 3, z: 0,
             rotation: 0,
             isMoving: false,
+            health: 100,
             colors: {
                 head: '#FAD417',
                 torso: '#00A2FF',
                 arms: '#FAD417',
                 legs: '#80C91C'
             },
-            hatId: null
+            hatId: null,
+            faceId: faceId || 'default'
         };
 
         // Envia apenas os players da mesma sala para o novo
@@ -235,6 +237,14 @@ io.on('connection', (socket) => {
         }
         io.to(roomName).emit('playerHatChanged', { playerId: socket.id, hatId });
     });
+    
+    // FACE
+    socket.on('equipFace', ({ faceId }) => {
+        if (players[socket.id]) {
+            players[socket.id].faceId = faceId;
+        }
+        io.to(roomName).emit('playerFaceChanged', { playerId: socket.id, faceId });
+    });
 
     // FERRAMENTAS
     socket.on("equipTool", (data) => {
@@ -260,6 +270,18 @@ io.on('connection', (socket) => {
     // EXPLOSÃO
     socket.on('explosion', (data) => {
         io.to(roomName).emit('explosion', data);
+    });
+
+    // TAKE DAMAGE
+    socket.on('takeDamage', ({ damage }) => {
+        const p = players[socket.id];
+        if (!p) return;
+        p.health = Math.max(0, p.health - damage);
+        if (p.health <= 0) {
+            io.to(roomName).emit('playerDied', { killer: 'unknown', victim: socket.id });
+        } else {
+            io.to(roomName).emit('healthUpdate', { playerId: socket.id, health: p.health });
+        }
     });
 
     // KILL EVENT -> notify room so killer and others see victim's death/respawn effect

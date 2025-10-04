@@ -60,6 +60,9 @@ const pendingHats = {};
 let lastSentTime = 0;
 const sendInterval = 100; // ms, so 10 times per second
 
+let lastNicknameUpdateTime = 0;
+const nicknameUpdateInterval = 100; // ms
+
 function playClickSound() {
     if (clickSound && clickSound.buffer) {
         if (clickSound.isPlaying) {
@@ -112,15 +115,27 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const hideBtn = document.getElementById('hide-player-list-btn');
     const playerList = document.getElementById('player-list');
-    const playerListContainer = document.getElementById('player-list-container');
+    const playerListHeader = document.querySelector('.player-list-header');
+
+    // Style the header to have button on the side
+    playerListHeader.style.display = 'flex';
+    playerListHeader.style.justifyContent = 'space-between';
+    playerListHeader.style.alignItems = 'center';
+    hideBtn.style.fontSize = '16px';
+    hideBtn.style.border = '1px solid #ccc';
+    hideBtn.style.background = '#f0f0f0';
+    hideBtn.style.cursor = 'pointer';
+    hideBtn.style.padding = '2px 8px';
 
     let isPlayerListHidden = false;
 
     hideBtn.addEventListener('click', () => {
         isPlayerListHidden = !isPlayerListHidden;
         playerList.style.display = isPlayerListHidden ? 'none' : '';
-        hideBtn.textContent = isPlayerListHidden ? 'Show' : 'Hide';
+        hideBtn.textContent = isPlayerListHidden ? '▲' : '▼';
     });
+    // Initial
+    hideBtn.textContent = '▼';
 });
 
 // Chat listener is now bound after socket connects inside initSocket()
@@ -155,15 +170,30 @@ function showBubbleChat(chatPlayerId, message) {
     bubble.className = 'bubble-chat';
     bubble.textContent = message;
     bubble.style.position = 'absolute';
-    bubble.style.background = 'rgba(255,255,255,0.85)';
-    bubble.style.borderRadius = '16px';
-    bubble.style.padding = '6px 14px';
-    bubble.style.fontSize = '16px';
+    bubble.style.background = 'white';
+    bubble.style.border = '1px solid black';
+    bubble.style.borderRadius = '8px';
+    bubble.style.padding = '4px 8px';
+    bubble.style.fontSize = '14px';
+    bubble.style.color = 'black';
     bubble.style.pointerEvents = 'none';
     bubble.style.whiteSpace = 'pre-line';
-    bubble.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+    bubble.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
     bubble.style.transition = 'opacity 0.3s';
     bubble.style.zIndex = 200;
+    // Add tail
+    const tail = document.createElement('div');
+    tail.style.position = 'absolute';
+    tail.style.bottom = '-6px';
+    tail.style.left = '50%';
+    tail.style.transform = 'translateX(-50%)';
+    tail.style.width = '0';
+    tail.style.height = '0';
+    tail.style.borderLeft = '4px solid transparent';
+    tail.style.borderRight = '4px solid transparent';
+    tail.style.borderTop = '6px solid white';
+    tail.style.zIndex = 199;
+    bubble.appendChild(tail);
 
     document.body.appendChild(bubble);
 
@@ -196,6 +226,7 @@ function showBubbleChat(chatPlayerId, message) {
 }
 
 function createNicknameLabel(player, nickname) {
+    // Nickname
     const label = document.createElement('div');
     label.className = 'nickname-label';
     label.textContent = nickname;
@@ -208,6 +239,28 @@ function createNicknameLabel(player, nickname) {
     label.style.zIndex = 100;
     document.body.appendChild(label);
     player.userData.nicknameLabel = label;
+
+    // Health bar
+    const healthBar = document.createElement('div');
+    healthBar.className = 'health-bar';
+    healthBar.style.position = 'absolute';
+    healthBar.style.width = '50px';
+    healthBar.style.height = '6px';
+    healthBar.style.background = 'green';
+    healthBar.style.border = '1px solid white';
+    healthBar.style.pointerEvents = 'none';
+    healthBar.style.zIndex = 100;
+    healthBar.style.imageRendering = 'pixelated';
+    const healthFill = document.createElement('div');
+    healthFill.style.width = '100%';
+    healthFill.style.height = '100%';
+    healthFill.style.background = 'red';
+    healthFill.style.imageRendering = 'pixelated';
+    healthBar.appendChild(healthFill);
+    document.body.appendChild(healthBar);
+    player.userData.healthBar = healthBar;
+    player.userData.healthFill = healthFill;
+    player.userData.health = 100; // Initial
 }
 
 function updateNicknamePositions() {
@@ -228,6 +281,16 @@ function updateNicknamePositions() {
         let y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
         p.userData.nicknameLabel.style.left = `${x - p.userData.nicknameLabel.offsetWidth / 2}px`;
         p.userData.nicknameLabel.style.top = `${y - p.userData.nicknameLabel.offsetHeight - 5}px`;
+        // Health bar below
+        const barY = y - p.userData.nicknameLabel.offsetHeight - 5 + 20;
+        p.userData.healthBar.style.left = `${x - 25}px`;
+        p.userData.healthBar.style.top = `${barY}px`;
+        p.userData.healthFill.style.width = p.userData.health + '%';
+        // Color from green to red
+        const health = p.userData.health;
+        const r = Math.floor((100 - health) * 2.55);
+        const g = Math.floor(health * 2.55);
+        p.userData.healthFill.style.background = `rgb(${r}, ${g}, 0)`;
     });
 }
 
@@ -289,17 +352,23 @@ function createPlayer(headModel) {
 
     // Face Overlay
     const faceTextureLoader = new THREE.TextureLoader();
-    const faceTexture = faceTextureLoader.load('OriginalGlitchedFace.webp');
+    let faceId = localStorage.getItem('rogold_equipped_face') || 'default';
+    let faceTexturePath = 'OriginalGlitchedFace.webp';
+    if (faceId === 'face_epic') {
+        faceTexturePath = 'epicface.jpg';
+    }
+    const faceTexture = faceTextureLoader.load(faceTexturePath);
     faceTexture.minFilter = THREE.NearestFilter;
     faceTexture.magFilter = THREE.NearestFilter;
-    const faceMaterial = new THREE.MeshLambertMaterial({ 
-        map: faceTexture, 
+    const faceMaterial = new THREE.MeshLambertMaterial({
+        map: faceTexture,
         transparent: true,
         alphaTest: 0.1 // To avoid rendering fully transparent parts
     });
     const faceGeometry = new THREE.PlaneGeometry(1.05, 1.05);
     const facePlane = new THREE.Mesh(faceGeometry, faceMaterial);
-    
+    facePlane.name = "Face"; // For easy selection
+
     // Position it relative to the head. The head is a cylinder model,
     // so we place the face on its surface on the Z axis.
     facePlane.position.set(0, 0, 0.75); // radius of the head model
@@ -409,6 +478,18 @@ function updatePlayerColors(player, colors) {
     });
 }
 
+function updatePlayerFace(player, faceId) {
+    player.traverse((child) => {
+        if (child.isMesh && child.name === "Face") {
+            if (faceId === 'epic') {
+                child.material.color.set(0xff0000); // Red for epic
+            } else {
+                child.material.color.set(0xffffff); // White for default
+            }
+        }
+    });
+}
+
 function createRemotePlayer(headModel, playerData) {
     const playerGroup = createPlayer(headModel);
     playerGroup.position.set(playerData.x, playerData.y, playerData.z);
@@ -416,10 +497,12 @@ function createRemotePlayer(headModel, playerData) {
     playerGroup.userData.targetPosition = new THREE.Vector3(playerData.x, playerData.y, playerData.z);
     playerGroup.userData.targetQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, playerData.rotation, 0));
     updatePlayerColors(playerGroup, playerData.colors);
+    updatePlayerFace(playerGroup, playerData.faceId || 'default');
     // Hat application is handled in ensureRemotePlayer() to avoid duplicate loads
 
     // Salve o nickname para uso na lista
     playerGroup.userData.nickname = playerData.nickname || "Guest";
+    playerGroup.userData.faceId = playerData.faceId || 'default';
     return playerGroup;
 }
 
@@ -445,6 +528,7 @@ function ensureRemotePlayer(playerData) {
         otherPlayers[playerData.id] = remotePlayer;
         scene.add(remotePlayer);
         createNicknameLabel(remotePlayer, playerData.nickname);
+        remotePlayer.userData.health = playerData.health || 100;
 
         // Apply any pending hat update, falling back to initial hat from snapshot
         const hatId = pendingHats[playerData.id] ?? playerData.hatId;
@@ -492,7 +576,7 @@ function initSocket() {
     
     socket.on('connect', () => {
         playerId = socket.id;
-        socket.emit('register', { nickname }); // <--- ENVIA O NICKNAME
+        socket.emit('register', { nickname, faceId: localStorage.getItem('rogold_equipped_face') || 'default' }); // <--- ENVIA O NICKNAME E FACE
 
         console.log('Connected to server');
         statusEl.textContent = `Online (${Object.keys(otherPlayers).length + 1} players)`;
@@ -655,7 +739,16 @@ function initSocket() {
                     remotePlayer.rightLeg.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightLeg.rotation.x, 0, 0.2);
 
                 }
-                
+
+                // Update health
+                remotePlayer.userData.health = playerData.health;
+
+                // Update face if changed
+                if (remotePlayer.userData.faceId !== playerData.faceId) {
+                    remotePlayer.userData.faceId = playerData.faceId;
+                    updatePlayerFace(remotePlayer, playerData.faceId);
+                }
+
                 // Update colors if they have changed
                 updatePlayerColors(remotePlayer, playerData.colors);
             }
@@ -765,11 +858,47 @@ socket.on('explosion', (data) => {
     spawnExplosion(new THREE.Vector3(data.position.x, data.position.y, data.position.z));
 });
 
+// Face change
+socket.on('playerFaceChanged', ({ playerId, faceId }) => {
+    if (playerId === playerId) {
+        // Local
+        player.userData.faceId = faceId;
+        updatePlayerFace(player, faceId);
+    } else {
+        const remote = otherPlayers[playerId];
+        if (remote) {
+            remote.userData.faceId = faceId;
+            updatePlayerFace(remote, faceId);
+        }
+    }
+});
+
+// Health update
+socket.on('healthUpdate', ({ playerId, health }) => {
+    if (playerId === playerId) {
+        // Local
+        document.getElementById('health-text').textContent = health;
+        document.getElementById('health-fill').style.width = health + '%';
+        player.userData.health = health;
+    } else {
+        const remote = otherPlayers[playerId];
+        if (remote) {
+            remote.userData.health = health;
+        }
+    }
+});
+
 // Player death: show respawn effect to killer and others by hiding victim temporarily.
 // Explosion visuals are already handled by the 'explosion' event above.
 socket.on('playerDied', ({ killer, victim }) => {
     // Local victim handles its own full respawn flow
-    if (victim === playerId) return;
+    if (victim === playerId) {
+        // Reset health to 100
+        document.getElementById('health-text').textContent = '100';
+        document.getElementById('health-fill').style.width = '100%';
+        player.userData.health = 100;
+        return;
+    }
 
     const remote = otherPlayers[victim];
     if (!remote) return;
@@ -781,6 +910,8 @@ socket.on('playerDied', ({ killer, victim }) => {
         // we only restore visibility here for the observers.
         if (otherPlayers[victim]) {
             otherPlayers[victim].visible = true;
+            // Reset health
+            otherPlayers[victim].userData.health = 100;
         }
     }, 3000);
 });
@@ -1165,6 +1296,7 @@ function emitColorChange() {
     };
     socket.emit('playerCustomize', colors);
 }
+
 
 function updateControls() {
     const mobileActive = areMobileControlsActive();
@@ -2095,9 +2227,13 @@ if (remotePlayer.userData.isEquipped) {
 
     controls.update();
 
-    updateNicknamePositions();
+    const currentTime = performance.now();
+    if (currentTime > lastNicknameUpdateTime + nicknameUpdateInterval) {
+        updateNicknamePositions();
+        lastNicknameUpdateTime = currentTime;
+    }
 
-    prevTime = performance.now();
+    prevTime = currentTime;
 
     // Render scene to low-res render target
     renderer.setRenderTarget(renderTarget);
@@ -2151,10 +2287,19 @@ for (let i = activeRockets.length - 1; i >= 0; i--) {
         player.visible &&
         mesh.position.distanceTo(player.position) < 2
     ) {
-        respawnPlayer();
+        // Take damage
+        const damage = 50;
+        let currentHealth = parseInt(document.getElementById('health-text').textContent);
+        currentHealth = Math.max(0, currentHealth - damage);
+        document.getElementById('health-text').textContent = currentHealth;
+        document.getElementById('health-fill').style.width = currentHealth + '%';
+        player.userData.health = currentHealth;
+        if (currentHealth <= 0) {
+            respawnPlayer();
+        }
         if (socket && socket.connected) {
-            socket.emit('playerHit', { killer: ownerId, victim: playerId });
-            socket.emit('explosion', { position: mesh.position }); // <--- NOVO
+            socket.emit('takeDamage', { damage });
+            socket.emit('explosion', { position: mesh.position });
         }
         scene.remove(mesh);
         activeRockets.splice(i, 1);
@@ -2309,6 +2454,31 @@ window.addEventListener('rogold_equipped_hat_changed', () => {
     } else {
         addHatToPlayer(player, null); // remove chapéu se não tiver
     }
+});
+
+window.addEventListener('rogold_equipped_face_changed', () => {
+    const faceId = localStorage.getItem('rogold_equipped_face') || 'default';
+    let faceTexturePath = 'OriginalGlitchedFace.webp';
+    if (faceId === 'face_epic') {
+        faceTexturePath = 'epicface.jpg';
+    }
+    const faceTextureLoader = new THREE.TextureLoader();
+    faceTextureLoader.load(faceTexturePath, (texture) => {
+        texture.minFilter = THREE.NearestFilter;
+        texture.magFilter = THREE.NearestFilter;
+        // Find the face mesh and update material
+        player.traverse(child => {
+            if (child.isMesh && child.name === "Head") {
+                // The face is a child of head
+                child.children.forEach(grandchild => {
+                    if (grandchild.material && grandchild.material.map) {
+                        grandchild.material.map = texture;
+                        grandchild.material.needsUpdate = true;
+                    }
+                });
+            }
+        });
+    });
 });
 
 function attachRocketLauncherToArm(arm, model) {

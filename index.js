@@ -327,10 +327,15 @@ class ProfileManager {
         
         profile.equippedItems[itemType] = itemId;
         this.saveProfiles();
-        
+
         // Quando o usuário equipa um item no site:
-        localStorage.setItem('rogold_equipped_hat', itemId); // itemId = 'hat_red', 'hat_doge', etc.
-        window.dispatchEvent(new Event('rogold_equipped_hat_changed'));
+        if (itemType === 'hat') {
+            localStorage.setItem('rogold_equipped_hat', itemId);
+            window.dispatchEvent(new Event('rogold_equipped_hat_changed'));
+        } else if (itemType === 'face') {
+            localStorage.setItem('rogold_equipped_face', itemId);
+            window.dispatchEvent(new Event('rogold_equipped_face_changed'));
+        }
 
         // NOVO: envie para o servidor
         if (window.socket && window.socket.connected) {
@@ -662,8 +667,10 @@ class CatalogManager {
             // Only 3D items with modelPath and a corresponding imageUrl (thumbnail)
             { id: 'hat_red', name: 'Boné Vermelho R', type: 'hat', price: 100, imageUrl: 'hat_red_thumbnail.jpg', modelPath: 'roblox_r_baseball_cap_r6.glb' },
             { id: 'hat_doge', name: 'Chapéu Doge', type: 'hat', price: 500, imageUrl: 'hat_doge_thumbnail.jpg', modelPath: 'doge_roblox_hat.glb' },
-            { id: 'hat_fedora_black', name: 'Fedora Preta', type: 'hat', price: 300, imageUrl: 'hat_fedora_black_thumbnail.jpg', modelPath: 'roblox_fedora.glb' }
-            // Removed all 2D items as per user request
+            { id: 'hat_fedora_black', name: 'Fedora Preta', type: 'hat', price: 300, imageUrl: 'hat_fedora_black_thumbnail.jpg', modelPath: 'roblox_fedora.glb' },
+            // Face items
+            { id: 'face_default', name: 'Default Face', type: 'face', price: 0, imageUrl: 'OriginalGlitchedFace.webp', modelPath: null },
+            { id: 'face_epic', name: 'Epic Face', type: 'face', price: 100, imageUrl: 'thumbnail1.jpg', modelPath: null }
         ]
     }
 
@@ -1706,7 +1713,11 @@ document.getElementById('catalog-link')?.addEventListener('click', function(e) {
 // NEW: Event listener for "Home" link
 document.getElementById('home-link')?.addEventListener('click', function(e) {
     e.preventDefault();
-    showMainContent();
+    if (window.location.pathname.endsWith('game.html')) {
+        window.location.href = 'index.html';
+    } else {
+        showMainContent();
+    }
 });
 
 // NEW: Event listener for "Jogos" link

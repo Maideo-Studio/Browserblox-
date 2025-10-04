@@ -166,9 +166,19 @@
                         <div class="catalog-categories">
                             <button class="category-button active" data-category="all">Todos</button>
                             <button class="category-button" data-category="hat">Chapéus</button>
+                            <button class="category-button" data-category="face">Rostos</button>
                         </div>
-                        <div class="items-grid" id="catalog-items-grid">
-                            <p class="empty-message">Nenhum item disponível no catálogo.</p>
+                        <div class="items-grid" id="catalog-items-grid" style="display: block;">
+                            <div class="catalog-item" data-category="face" data-item="default-face" style="display: block; border: 1px solid black; padding: 10px;">
+                                <h4>Default Face</h4>
+                                <p>Free</p>
+                                <button class="buy-button" data-item="default-face">Equip</button>
+                            </div>
+                            <div class="catalog-item" data-category="face" data-item="epic-face" style="display: block; border: 1px solid black; padding: 10px;">
+                                <h4>Epic Face</h4>
+                                <p>100 Coins</p>
+                                <button class="buy-button" data-item="epic-face">Buy</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -379,5 +389,63 @@
 
     <!-- Link to external JavaScript file -->
     <script type="module" src="index.js"></script>
+    <script>
+        // Navigation
+        document.addEventListener('DOMContentLoaded', () => {
+            const links = document.querySelectorAll('nav ul li a');
+            links.forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    document.querySelectorAll('nav ul li a').forEach(l => l.classList.remove('active'));
+                    link.classList.add('active');
+                    const id = link.id.replace('-link', '-section');
+                    document.querySelectorAll('main > section').forEach(section => {
+                        section.classList.add('hidden');
+                    });
+                    document.getElementById(id).classList.remove('hidden');
+                    // If catalog, add category listeners
+                    if (id === 'catalog-section') {
+                        addCategoryListeners();
+                    }
+            });
+
+            // Buy functionality
+            const buyButtons = document.querySelectorAll('.buy-button');
+            buyButtons.forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const item = e.target.dataset.item;
+                    if (item === 'default-face') {
+                        localStorage.setItem('rogold_equipped_face', 'default');
+                        alert('Default Face equipped!');
+                    } else if (item === 'epic-face') {
+                        // Check coins
+                        const coins = parseInt(localStorage.getItem('rogold_coins') || '0');
+                        if (coins >= 100) {
+                            localStorage.setItem('rogold_coins', coins - 100);
+                            localStorage.setItem('rogold_equipped_face', 'epic');
+                            alert('Epic Face bought and equipped!');
+                            // Update coins display
+                            document.getElementById('current-catalog-coins').textContent = coins - 100;
+                            document.getElementById('user-coins').textContent = coins - 100;
+                        } else {
+                            alert('Not enough coins! You have ' + coins + ' coins.');
+                        }
+                    }
+                });
+            });
+        });
+
+        function addCategoryListeners() {
+            const categoryButtons = document.querySelectorAll('.category-button');
+            categoryButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    categoryButtons.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    // No filtering needed since all items are faces
+                });
+            });
+        }
+        });
+    </script>
 </body>
 </html>
