@@ -6,7 +6,7 @@
       "ClassName": "Part",
       "Name": "Part1",
       "Position": [0, 10, 0],
-      "Size": [4, 2, 2],
+      "Size": [4, 10, 10],
       "Color": [0.5, 0.5, 0.5],
       "Anchored": false,
       "CanCollide": true,
