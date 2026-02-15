@@ -4284,7 +4284,7 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 
     exitBtn.addEventListener('click', () => {
-        window.location.href = '/'; // Or any exit logic you want
+        window.location.href = 'https://sites.google.com/view/browserbloxx/browserblox'; // Or any exit logic you want
     });
 
     // Help button event listener
