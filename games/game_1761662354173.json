@@ -10,9 +10,9 @@
       "Anchored": true,
       "CanCollide": true,
       "Size": [
+        6,
         4,
-        4,
-        4
+        6
       ],
       "Position": [
         1.1403136926525193,
