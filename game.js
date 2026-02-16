@@ -32,7 +32,7 @@ const JUMP_IMPULSE = 300; // Changed from 120 to 200 for higher jumps
 let canShoot = true;
 let explosionSound;
 const explodingParticles = [];
-let nickname = localStorage.getItem('rogold_currentUser') || 'Guest' + Math.floor(Math.random() * 10000);
+let nickname = localStorage.getItem('rogold_currentUser') || 'Baka' + Math.floor(Math.random() * 10000);
 let isFlying = false;
 let speedMultiplier = 1;   // começa normal
 let isSpeeding = false;    // controle do modo admin
